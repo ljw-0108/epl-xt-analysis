@@ -1,0 +1,26 @@
+{
+  "competition": "English Premier League",
+  "season": "2026/27",
+  "rounds_included": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+  "retrieved_on": "2026-11-09",
+  "total_matches": 100,
+  "rounds_1_to_9": {
+    "match_count": 90,
+    "provider": "open-matchday",
+    "url": "https://raw.githubusercontent.com/oladeeayo/open-matchday/master/data/ENG_1_premier-league/results_2627.csv",
+    "data_kind": "match results only (minimal copied fields)"
+  },
+  "round_10": {
+    "match_count": 10,
+    "provider": "cross-checked published match results",
+    "urls": [
+      "https://plstats.uk/matches/",
+      "https://www.footballmatchstats.com/matchweek/10",
+      "https://english.ahram.org.eg/NewsContent/6/55/581763/Sports/World/English-Premier-League-results-amp%3B-scorers-Matchd.aspx"
+    ],
+    "data_kind": "match results only"
+  },
+  "includes_pass_events": false,
+  "includes_pitch_coordinates": false,
+  "data_usage": "educational / non-commercial; attribute open-matchday; check individual providers before republication"
+}

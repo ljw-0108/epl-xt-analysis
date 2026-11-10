@@ -1,0 +1,13 @@
+{
+  "provider": "openplay (Noah Bair)",
+  "source_reference": "https://github.com/nlbair/openplay/releases/tag/data-v0.1.0",
+  "competition": "EPL",
+  "season": "2025/26",
+  "verification_method": "source_release_sha256",
+  "license_or_permission": "CC BY 4.0; credit openplay (Noah Bair)",
+  "match_ids": [],
+  "processed_passes_sha256": "",
+  "xt_grid_sha256": "",
+  "verified_by_user": false,
+  "note": "Automatically created with actual match IDs/hashes after scripts/download_openplay_2526.py succeeds. Never edit manually to claim downloaded data."
+}

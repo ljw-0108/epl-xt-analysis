@@ -27,7 +27,8 @@ streamlit run app.py
 - `scripts/download_openplay_2526.py`: 원본 파일·xT 그리드 다운로드, SHA-256 검증, canonical pass CSV 및 manifest 생성
 - `src/epl_xt/openplay_adapter.py`: 엄격한 25/26 컬럼 변환 (원본 수신자 미제공을 그대로 보존)
 - `src/epl_xt/provenance_2526.py`: import 데이터 무결성 검사
-- `app.py`: 25/26 실제 패스 좌표, xT, 선수 비교 (다운로드 전에는 실행 방법만 표시)
+- `app.py`: 사이드바 팀·경기 필터 + 탭 ① 패스(전체 패스 지도·방향 분포·전진 패스) ② xT(위치별 히트맵·팀 비교) ③ 선수 순위·2인 비교 (다운로드 전에는 실행 방법만 표시)
+- `src/epl_xt/passing.py`, `xt.py`, `players.py`, `charts.py`, `app_data.py`: 지표 계산·차트·검증된 데이터 로딩 (정의는 `docs/data_contract.md`)
 - `pages/99_26_27_결과_보관.py`: **별도** 26/27 1~10R 경기 결과, 혼합 금지
 - `docs/codex_prompts.md`: AI 개발을 위한 다음 작업 프롬프트
 - `tests/test_openplay_adapter.py`: 소스 필드 변환 및 시즌 변경 방지 자동 테스트

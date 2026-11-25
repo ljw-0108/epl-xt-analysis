@@ -6,10 +6,10 @@
 | Gate | Target | Evidence | Status |
 |---|---|---|---|
 | A | Repo and data audit | `docs/data_quality_report.md` (re-measured 2026-11-25): 380 matches, 362,739 passes, 0 dropped; grid hash pinned | **Done (B0)** |
-| B | Passing analysis | `passing.py` + 7 tests; real-data progressive count reproduced (B1); UI pending B4 | **Logic done**, UI pending |
-| C | xT analysis | grid hash pinned + orientation evidence (B0); team totals reproduced independently for 20/20 teams, diff 0.0 (B2); heatmap matrices; UI pending B4 | **Logic done**, UI pending |
-| D | Player analysis | `players.py` + 6 tests (filter consistency, missing player, transfers, NaN ranking); real-data counts match raw for 545/545 (team, player) keys; UI pending B4 | **Logic done**, UI pending |
-| E | Quality | pytest and Streamlit smoke test, data exclusions, README | Pending review |
+| B | Passing analysis | `passing.py` (B1) + app tab ① full pass map, direction distribution, progressive (B4); AppTest filter test | **Done** |
+| C | xT analysis | grid hash pinned (B0); 20/20 team totals reproduced, diff 0.0 (B2); app tab ② signed/count heatmaps, grid view, same-match team table (B4) | **Done** |
+| D | Player analysis | `players.py` (B3) + app tab ③ ranking and 2-player comparison on the shared filter (B4) | **Done** |
+| E | Quality | 46 passed / 5 skipped; AppTest smoke tests + Playwright demo on real data (B4); README final pass in B5 | In progress |
 | F | Portfolio/release | deploy URL or documented blocker, PR, screenshots, demo notes | Pending |
 
 ## Scope and dates from assignment
@@ -66,3 +66,12 @@
 - Real data: 545 (team, player) rows; key set and per-key attempted counts identical to the raw parquet (0 mismatches); pass_xt identical to existing `player_xt_ranking` (max diff 0.0); totals 362,739 / 290,873 / 29,326 progressive; 14 transferred players kept per club.
 - Arsenal example (all 38 matches): Declan Rice 2,363 attempted, 1,940 successful, 185 progressive, pass-xT 9.9476; Bukayo Saka 907 / 645 / 100 / 7.1879.
 - Next: B4 app integration (tabs, cached loading, opponent labels, full pass map, heatmaps, comparison, AppTest smoke tests).
+
+### B4 — App integration (2026-11-25)
+- `app.py` rewritten: sidebar filters (team, season / selected matches labelled `vs <opponent> · <match_id>`) shared by tabs ① 패스 ② xT ③ 선수 비교; cached verified loading; `EPL_DATA_ROOT` override for tests.
+- New `src/epl_xt/app_data.py` (load_dataset, match_options) and `src/epl_xt/charts.py` (pass_map_figure draws every pass — the 250-pass sampling is gone; zone_heatmap_figure with diverging red–gray–blue for signed xT and sequential blue for counts, palette from the dataviz reference). Chart text in English because default matplotlib fonts lack Korean glyphs.
+- `tests/test_app.py` (9 tests, synthetic fixture with real hashing): loader, tamper and match-id mismatch rejection, every pass drawn, zero-centred diverging norm, no "-0.00" labels, AppTest demo path (season → one match → empty selection → other team), same-player warning, no-data instructions.
+- `requirements.txt`: streamlit >=1.50 (uses `width="stretch"`, `bar_chart(horizontal, sort, stack)`).
+- Real-data Playwright run (Arsenal → vs Man Utd 1903125): 329 attempted / 239 successful / 72.6% / 28 progressive, pass-xT 0.761 — identical to an independent computation; no page errors; season map legibility fixed after review (alpha/width scale with pass count).
+- Known: `pages/99_26_27_결과_보관.py` still uses deprecated `use_container_width` (archival page, untouched).
+- Next: B5 docs/README, screenshots, demo notes; optional CSV download.

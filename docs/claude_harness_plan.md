@@ -9,8 +9,8 @@
 | B | Passing analysis | `passing.py` (B1) + app tab ① full pass map, direction distribution, progressive (B4); AppTest filter test | **Done** |
 | C | xT analysis | grid hash pinned (B0); 20/20 team totals reproduced, diff 0.0 (B2); app tab ② signed/count heatmaps, grid view, same-match team table (B4) | **Done** |
 | D | Player analysis | `players.py` (B3) + app tab ③ ranking and 2-player comparison on the shared filter (B4) | **Done** |
-| E | Quality | 46 passed / 5 skipped; AppTest smoke tests + Playwright demo on real data (B4); README final pass in B5 | In progress |
-| F | Portfolio/release | deploy URL or documented blocker, PR, screenshots, demo notes | Pending |
+| E | Quality | 46 passed / 5 skipped; AppTest + Playwright on real data; README rewritten with setup, provenance, definitions, limits (B5) | **Done** |
+| F | Portfolio/release | screenshots `docs/screenshots/`, `docs/demo.md`, PR (B5); deploy URL blocked: data is not committed, needs startup download design | Partly done |
 
 ## Scope and dates from assignment
 - 2026-11-10 to 11-16: data verification and xT stabilization (historically reported done; recheck).
@@ -75,3 +75,11 @@
 - Real-data Playwright run (Arsenal → vs Man Utd 1903125): 329 attempted / 239 successful / 72.6% / 28 progressive, pass-xT 0.761 — identical to an independent computation; no page errors; season map legibility fixed after review (alpha/width scale with pass count).
 - Known: `pages/99_26_27_결과_보관.py` still uses deprecated `use_container_width` (archival page, untouched).
 - Next: B5 docs/README, screenshots, demo notes; optional CSV download.
+
+### B5 — Docs, screenshots, optional CSV export (2026-11-25)
+- `app.py`: empty direction classes hidden from the table (no "None" rate, listed in caption); optional filtered-pass CSV download (real rows + computed columns, attribution note, no recipient column).
+- `tests/test_app.py`: asserts the download button and that the direction table has no missing rates / empty class.
+- Screenshots (user-approved): `docs/screenshots/01_match_passing.png`, `02_xt_heatmap.png`, `03_player_comparison.png`, `04_season_passing.png` (real data, 2x, 256-colour PNG, 2.3 MB total).
+- Docs: README rewritten; `docs/demo.md` added; `docs/requirements.md` and `docs/definition_of_done.md` checkboxes updated with evidence.
+- `python -m pytest -q` → 46 passed, 5 skipped.
+- Remaining: deployment (Streamlit Cloud needs a startup download step because data is not committed), archived 26/27 CSV, optional open-play-only xT filter.

@@ -97,6 +97,8 @@ with tab_pass:
     st.subheader("패스 방향 분포")
     dist = direction_distribution(filtered)
     dist["방향"] = dist["direction"].map(DIRECTION_KO)
+    empty_classes = dist.loc[dist["attempted"] == 0, "방향"].tolist()
+    dist = dist.loc[dist["attempted"] > 0]  # no rate is shown for a class with no passes
     left, right = st.columns([3, 2])
     left.bar_chart(dist.set_index("방향")[["attempted"]].rename(columns={"attempted": "패스 시도"}),
                    color="#2a78d6", horizontal=True, sort=False)
@@ -106,7 +108,19 @@ with tab_pass:
                     hide_index=True, width="stretch",
                     column_config={"비중": st.column_config.NumberColumn(format="percent"),
                                    "성공률": st.column_config.NumberColumn(format="percent")})
-    st.caption("각도(105×68m 기준, 0° = 공격 방향): |각도| < 45° 전진, > 135° 후진, 그 사이 횡.")
+    st.caption("각도(105×68m 기준, 0° = 공격 방향): |각도| < 45° 전진, > 135° 후진, 그 사이 횡."
+               + (f" 해당 패스 없음: {', '.join(empty_classes)}." if empty_classes else ""))
+
+    st.subheader("데이터 내려받기")
+    export_cols = ["match_id", "team", "player", "x", "y", "end_x", "end_y", "is_successful",
+                   "direction", "is_progressive", "length_m", "pass_xt"]
+    st.download_button(
+        "현재 필터의 패스 CSV 내려받기",
+        filtered[export_cols].to_csv(index=False).encode("utf-8-sig"),
+        file_name=f"epl2526_{team.replace(' ', '_')}_{len(selected_ids)}matches_passes.csv",
+        mime="text/csv")
+    st.caption("원본 이벤트에서 변환한 실제 패스 행과 이 앱의 계산 열입니다. 수신자 열은 원본에 없어 포함하지 않습니다. "
+               "Event data: openplay (Noah Bair), CC BY 4.0 — 재배포 시 출처 표기 필요.")
 
 # ---- 2. xT ----
 with tab_xt:

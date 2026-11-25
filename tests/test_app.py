@@ -105,6 +105,10 @@ def test_app_demo_path_and_filters_change_numbers(monkeypatch, data_root):
     at = run_app(monkeypatch, data_root)
     assert at.sidebar.selectbox[0].value == "Alpha"
     assert metric(at, "경기") == "2" and metric(at, "패스 시도") == "12"
+    assert len(at.get("download_button")) == 1
+    direction_table = at.dataframe[0].value
+    assert "방향" in direction_table.columns and direction_table["성공률"].notna().all()
+    assert "길이 0" not in direction_table["방향"].tolist()  # empty class hidden, not shown as None
     # Season -> one match: every tab's numbers follow the same filter.
     at.sidebar.radio[0].set_value("경기 선택").run()
     assert not at.exception

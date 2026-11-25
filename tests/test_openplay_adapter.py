@@ -40,3 +40,35 @@ def test_out_of_bounds_pass_is_dropped_and_reported():
     result, report = convert_openplay_passes(src)
     assert len(result) == 1
     assert report["dropped_pass_rows"] == 1
+
+
+FLAGS = ("q_CornerTaken", "q_FreekickTaken", "q_IndirectFreekickTaken", "q_ThrowIn", "q_GoalKick")
+
+
+def with_flags():
+    src = fixture()
+    for f in FLAGS:
+        src[f] = False
+    src.loc[1, "q_CornerTaken"] = True  # the unsuccessful pass is a corner
+    return src
+
+
+def test_open_play_flag_from_provider_qualifiers():
+    result, report = convert_openplay_passes(with_flags())
+    assert result.is_open_play.tolist() == [True, False]
+    assert report["set_piece_restart_pass_rows"] == 1
+    assert report["set_piece_flags"] == list(FLAGS)
+
+
+def test_missing_flags_disable_open_play_instead_of_guessing():
+    result, report = convert_openplay_passes(fixture())
+    assert result.is_open_play.isna().all()
+    assert "unavailable" in report["set_piece_flags"]
+
+
+def test_incomplete_flags_are_rejected():
+    src = with_flags()
+    src["q_ThrowIn"] = src["q_ThrowIn"].astype(object)
+    src.loc[0, "q_ThrowIn"] = None
+    with pytest.raises(ValueError, match="complete booleans"):
+        convert_openplay_passes(src)

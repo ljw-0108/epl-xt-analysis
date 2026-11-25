@@ -15,7 +15,7 @@ import streamlit as st
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / "src"))
-from epl_xt.app_data import load_dataset, match_options  # noqa: E402
+from epl_xt.app_data import load_dataset, match_options, open_play_available  # noqa: E402
 from epl_xt.charts import pass_map_figure, zone_heatmap_figure  # noqa: E402
 from epl_xt.passing import direction_distribution, passing_summary  # noqa: E402
 from epl_xt.pipeline import build_verified_dataset  # noqa: E402
@@ -95,12 +95,21 @@ with st.sidebar:
         picked = st.multiselect("경기 (상대팀 · match_id)", list(labels), default=list(labels)[:1], key=f"matches_{team}")
         selected_ids = [labels[x] for x in picked]
     st.caption(f"선택: {len(selected_ids)} / {len(options)} 경기. 원본에 경기 날짜·홈/원정 정보가 없어 상대팀과 ID만 표시합니다.")
+    can_filter = open_play_available(scored)
+    pass_scope = st.radio("패스 범위", ["전체 패스", "오픈플레이만"], horizontal=True, disabled=not can_filter,
+                          help="오픈플레이만 = 코너킥·프리킥·스로인·골킥으로 재개하는 패스 제외 (원본 제공자 플래그 기준)")
+    if not can_filter:
+        st.caption("현재 데이터에 세트피스 플래그가 없어 오픈플레이 필터를 쓸 수 없습니다. 다운로드 스크립트를 다시 실행하세요.")
+    open_play_only = can_filter and pass_scope == "오픈플레이만"
+    SCOPE_NOTE = ("오픈플레이 패스만 (코너·프리킥·스로인·골킥 재개 패스 제외, 킥오프는 원본 플래그가 없어 포함)"
+                  if open_play_only else "세트피스(코너·프리킥·스로인·골킥) 재개 패스 포함")
 
 if not selected_ids:
     st.info("선택된 경기가 없습니다. 사이드바에서 경기를 한 개 이상 고르세요.")
     st.stop()
 
-in_matches = scored.loc[scored["match_id"].isin(selected_ids)]
+in_scope = scored.loc[scored["is_open_play"].astype(bool)] if open_play_only else scored
+in_matches = in_scope.loc[in_scope["match_id"].isin(selected_ids)]
 filtered = in_matches.loc[in_matches["team"] == team]
 if filtered.empty:
     st.info("선택한 경기에 이 팀의 패스 데이터가 없습니다.")
@@ -118,7 +127,7 @@ with tab_pass:
     c[3].metric("성공률", f"{s['completion_rate']:.1%}")
     c[4].metric("전진 패스", f"{s['progressive']:,}")
     st.caption("전진 패스 = 성공 패스 중 상대 골문 중앙까지 거리가 25% 이상 줄어든 패스 (105×68m 환산). "
-               "세트피스(코너·프리킥·스로인) 패스 포함.")
+               f"패스 범위: {SCOPE_NOTE}.")
 
     show = st.radio("지도에 표시할 패스", ["전체", "성공", "실패", "전진 패스"], horizontal=True)
     shown = {"전체": filtered, "성공": filtered.loc[filtered["is_successful"]],
@@ -152,11 +161,11 @@ with tab_pass:
 
     st.subheader("데이터 내려받기")
     export_cols = ["match_id", "team", "player", "x", "y", "end_x", "end_y", "is_successful",
-                   "direction", "is_progressive", "length_m", "pass_xt"]
+                   "is_open_play", "direction", "is_progressive", "length_m", "pass_xt"]
     st.download_button(
         "현재 필터의 패스 CSV 내려받기",
         filtered[export_cols].to_csv(index=False).encode("utf-8-sig"),
-        file_name=f"epl2526_{team.replace(' ', '_')}_{len(selected_ids)}matches_passes.csv",
+        file_name=f"epl2526_{team.replace(' ', '_')}_{len(selected_ids)}matches_{'openplay' if open_play_only else 'all'}_passes.csv",
         mime="text/csv")
     st.caption("원본 이벤트에서 변환한 실제 패스 행과 이 앱의 계산 열입니다. 수신자 열은 원본에 없어 포함하지 않습니다. "
                "Event data: openplay (Noah Bair), CC BY 4.0 — 재배포 시 출처 표기 필요.")
@@ -171,7 +180,8 @@ with tab_xt:
     c[2].metric("−xT 합계", f"{row.negative_xt:.3f}" if row is not None else "—")
     c[3].metric("성공 패스당 xT", f"{row.xt_per_successful_pass:.4f}" if row is not None else "—")
     st.caption("xT = 성공 패스의 xT(도착 칸) − xT(출발 칸), 실패 패스는 0. 그리드: Karun Singh 공개 12×8 "
-               "(과거 EPL 시즌으로 만든 모델, 2025/26으로 재학습하지 않음). 득점·승리 확률 예측이 아닙니다.")
+               "(과거 EPL 시즌으로 만든 모델, 2025/26으로 재학습하지 않음). 득점·승리 확률 예측이 아닙니다. "
+               f"패스 범위: {SCOPE_NOTE}.")
 
     view = st.radio("히트맵", ["출발 위치별 xT 합계", "도착 위치별 xT 합계", "출발 위치별 성공 패스 수", "사용한 xT 그리드"],
                     horizontal=True)
@@ -202,7 +212,7 @@ with tab_xt:
 with tab_players:
     table = player_table(filtered)
     st.caption("같은 팀·경기 필터 기준입니다. 출전 시간 데이터가 없어 90분당 지표는 제공하지 않으며, "
-               "‘경기 수’는 패스를 1회 이상 시도한 경기 수입니다.")
+               f"‘경기 수’는 패스를 1회 이상 시도한 경기 수입니다. 패스 범위: {SCOPE_NOTE}.")
     st.subheader("선수 순위")
     c = st.columns(2)
     metric = c[0].selectbox("순위 기준", list(RANKABLE), index=list(RANKABLE).index("pass_xt"), format_func=METRIC_KO.get)

@@ -1,7 +1,7 @@
 # Canonical 2025/26 EPL pass-event contract
 
 `data/processed/passes.csv` :
-- `match_id`, `team`, `player`, `recipient`, `x`, `y`, `end_x`, `end_y`, `is_successful`
+- `match_id`, `team`, `player`, `recipient`, `x`, `y`, `end_x`, `end_y`, `is_successful`, `is_open_play`
 - Event data: **OpenPlay** `events_eng_2526.parquet`; ensure `comp=eng`, `season=2526`, `type=Pass`.
 - `is_successful`: OpenPlay `outcome == Successful`.
 - `x`, `y`, `end_x`, `end_y`: native OpenPlay 0..100, each team attacks toward x=100. Remove & count rows with missing or out-of-bounds coords; never impute values.
@@ -25,7 +25,7 @@
 - Cell lookup: col = floor(x/100*12), row = floor(y/100*8), with x=100 / y=100 placed in the last cell. Grid rows = y, cols = x toward the attacked goal.
 - `team_xt_summary`: per team over the rows passed in (filters applied first): successful passes, signed total, positive part, negative part, xT per successful pass. Failed passes contribute 0 and are not counted.
 - `xt_by_zone(location="start"|"end", value="sum"|"count")`: 8x12 heatmap data; the signed "sum" matrix adds up to the selection's total.
-- **Eligibility caveat:** every OpenPlay `Pass` event is included, so set-piece passes (corners, free kicks, throw-ins) count. Corner deliveries can carry large xT gains (e.g. Arsenal's largest start-zone total is the corner cell). An open-play-only filter using OpenPlay qualifier columns is a possible later addition, not part of the current metric.
+- **Eligibility:** by default every OpenPlay `Pass` event is included, so set-piece restart passes count (corner deliveries can carry large xT gains). The app's `패스 범위 = 오픈플레이만` filter removes them (see Open-play filter).
 
 ## Player metrics (`src/epl_xt/players.py`)
 - Key = (team, player); a player who changed clubs is listed once per club and never merged.
@@ -33,3 +33,11 @@
 - No per-90 metrics: the source has no minutes played.
 - `compare_players` takes exactly two distinct keys from a table built on the same filtered selection; players without passes in that selection are returned in `missing`, never zero-filled.
 - `rank_players` drops players under `min_attempted` and NaN metric values instead of ranking them as 0.
+
+## Open-play filter (`is_open_play`)
+- `is_open_play = False` when any provider qualifier flag `q_CornerTaken`, `q_FreekickTaken`, `q_IndirectFreekickTaken`, `q_ThrowIn`, `q_GoalKick` is true on the pass; `True` otherwise.
+- Flags must be complete booleans, otherwise conversion stops. If the source file lacks any flag column, `is_open_play` is left empty and the app disables the filter — no location-based guessing.
+- Not excluded: kick-offs (no source flag; 1,696 untagged passes start at the centre spot), goalkeeper throws (`q_KeeperThrow`, open-play distribution), and passes later in a set-piece phase (only the restart pass itself is flagged).
+- Evidence (`docs/data_quality_report.md`): corner flags 100% start at a corner, throw-in flags 100% at a touchline, goal-kick flags 99.98% in the own six-yard area; no pass has two restart flags. 32,271 restart passes / 330,468 open-play passes.
+- The filter applies before every tab, so pass, xT and player numbers always share one scope.
+- Note: OpenPlay's own published `progressive_passes` aggregate also excludes set pieces and requires a start at x >= 40; this project's progressive definition (25% closer, successful) has no start-zone rule and follows the `패스 범위` filter.

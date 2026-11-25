@@ -11,8 +11,9 @@
 | ① 패스 분석 | 팀·경기(상대팀 표시) 필터, 전체 패스 지도(샘플링 없음, 성공/실패/전진 필터), 방향 분포(전진·횡·후진), 전진 패스 수, 필터된 패스 CSV 내려받기 |
 | ② xT 분석 | 부호 유지 패스 xT 합계(+/− 분리), 출발·도착 위치별 xT 히트맵, 위치별 성공 패스 수, 사용한 xT 그리드, 같은 경기 내 상대팀 비교 |
 | ③ 선수 비교 | 지표별 선수 순위(최소 시도 수), 같은 필터에서 두 선수 비교(차이 포함) |
+| 공통 필터 | 팀, 경기 범위(시즌 전체/경기 선택), **패스 범위(전체/오픈플레이만)** — 세 탭에 동시에 적용 |
 
-스크린샷: [xT 히트맵](docs/screenshots/02_xt_heatmap.png) · [선수 비교](docs/screenshots/03_player_comparison.png) · [시즌 전체 패스](docs/screenshots/04_season_passing.png) · 시연 순서: [docs/demo.md](docs/demo.md)
+스크린샷: [xT 히트맵](docs/screenshots/02_xt_heatmap.png) · [선수 비교](docs/screenshots/03_player_comparison.png) · [시즌 전체 패스](docs/screenshots/04_season_passing.png) · [오픈플레이 xT](docs/screenshots/05_openplay_xt.png) · 시연 순서: [docs/demo.md](docs/demo.md)
 
 ## 실행 방법 (Windows PowerShell 기준, Python 3.11+)
 ```powershell
@@ -53,12 +54,12 @@ macOS/Linux는 `python3 -m venv .venv && source .venv/bin/activate` 후 같은 �
 - **패스 수신자 없음:** 원본에 수신자 필드가 없어(`related_player_id`도 패스에서 100% 비어 있음) 선수→선수 패스 네트워크를 만들지 않는다. 추정 연결도 표시하지 않는다.
 - **출전 시간 없음:** 90분당 지표를 제공하지 않는다.
 - **xT 그리드:** 과거 EPL 시즌으로 만든 공개 모델을 재사용한 것이며 2025/26으로 재학습하지 않았다. 패스의 위치 가치 변화 지표이지 득점·승리 확률 예측이 아니다.
-- **세트피스 포함:** 코너·프리킥·스로인 패스도 포함된다(코너 지점 xT가 크게 나올 수 있음).
+- **세트피스:** 기본값은 코너·프리킥·스로인·골킥 재개 패스를 포함한다. `패스 범위 = 오픈플레이만`은 원본 제공자 플래그로 이 패스(32,271건)를 제외한다. 킥오프는 원본에 플래그가 없어 제외되지 않는다. 재개 패스 비중이 팀마다 달라 xT 순위가 바뀐다(예: Arsenal 46.29 → 32.69).
 - **경기 날짜·홈/원정 없음:** 경기 선택지는 데이터에서 계산한 상대팀과 match_id만 표시한다.
 - 26/27 시즌은 경기 결과만 별도 보관 페이지(`pages/99_26_27_결과_보관.py`)에 있으며 25/26 분석과 합치지 않는다. 결과 CSV는 저장소에 없어서 관련 테스트 5개는 사유와 함께 skip된다.
 
 ## 테스트
-`python -m pytest -q` → **53 passed, 5 skipped** (2026-11-25, 이 브랜치). 합성 데이터 테스트는 `SYNTHETIC_TEST_ONLY`로 표시되며 실데이터로 표시되지 않는다. 실데이터 수치는 원본 Parquet에서 별도 구현으로 다시 계산해 일치를 확인했다(기록: [`docs/claude_harness_plan.md`](docs/claude_harness_plan.md)).
+`python -m pytest -q` → **58 passed, 5 skipped** (2026-11-25, 이 브랜치). 합성 데이터 테스트는 `SYNTHETIC_TEST_ONLY`로 표시되며 실데이터로 표시되지 않는다. 실데이터 수치는 원본 Parquet에서 별도 구현으로 다시 계산해 일치를 확인했다(기록: [`docs/claude_harness_plan.md`](docs/claude_harness_plan.md)).
 
 ## 코드 구조
 - `app.py` — Streamlit UI (탭 3개, 공통 필터)

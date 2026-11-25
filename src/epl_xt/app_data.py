@@ -31,8 +31,15 @@ def load_dataset(root: str | Path) -> tuple[dict, pd.DataFrame, pd.DataFrame, np
     grid = np.loadtxt(paths["grid"], delimiter=",")
     if set(passes["match_id"].astype(str).unique()) != {str(m) for m in manifest["match_ids"]}:
         raise ValueError("실제 패스 데이터 경기 ID와 출처 기록이 일치하지 않습니다")
+    if not ("is_open_play" in passes.columns and pd.api.types.is_bool_dtype(passes["is_open_play"])):
+        # Older imports or sources without complete set-piece flags: the open-play filter is unavailable.
+        passes["is_open_play"] = pd.Series(pd.NA, index=passes.index, dtype="boolean")
     scored = add_pass_xt(add_pass_geometry(passes), grid)
     return manifest, scored, match_index(scored), grid
+
+
+def open_play_available(scored: pd.DataFrame) -> bool:
+    return "is_open_play" in scored.columns and not scored["is_open_play"].isna().any()
 
 
 def match_options(matches: pd.DataFrame, team: str) -> list[tuple[str, str]]:

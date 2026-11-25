@@ -14,8 +14,9 @@ from typing import Callable
 
 import numpy as np
 import pandas as pd
+import pyarrow.parquet as pq
 
-from .openplay_adapter import convert_openplay_passes
+from .openplay_adapter import SET_PIECE_FLAGS, convert_openplay_passes
 from .provenance_2526 import ALLOWED_SOURCE, sha256
 from .quality import match_index
 from .validation import validate_passes
@@ -26,7 +27,8 @@ GRID_URL = "https://karun.in/blog/data/open_xt_12x8_v1.json"
 # The grid publisher provides no checksum file. This SHA-256 was observed on 2026-11-25
 # (see docs/data_quality_report.md); a different file stops the pipeline.
 GRID_SHA256 = "5d8e9aaa1da23bbb39a6c6ffdd5b96d175e01c800064c5a1cc19e228c9875a7f"
-SOURCE_COLUMNS = ["comp", "season", "match_id", "team", "player", "type", "outcome", "x", "y", "end_x", "end_y"]
+SOURCE_COLUMNS = ["comp", "season", "match_id", "team", "player", "type", "outcome", "x", "y", "end_x", "end_y",
+                  *SET_PIECE_FLAGS]
 
 Fetcher = Callable[[str, Path, int], None]
 
@@ -85,7 +87,10 @@ def build_verified_dataset(root: str | Path, fetch: Fetcher = download, grid_sha
         raise ValueError("Karun xT grid must contain 8 x 12 finite nonnegative values")
 
     log("패스 변환 및 검증")
-    canonical, report = convert_openplay_passes(pd.read_parquet(source_path, columns=SOURCE_COLUMNS))
+    # Base columns are required (the adapter rejects their absence); q_ flag columns vary by file.
+    available = set(pq.read_schema(source_path).names)
+    columns = [c for c in SOURCE_COLUMNS if c in available or c not in SET_PIECE_FLAGS]
+    canonical, report = convert_openplay_passes(pd.read_parquet(source_path, columns=columns))
     canonical = validate_passes(canonical)
     passes_path = processed / "passes.csv"
     canonical.to_csv(passes_path, index=False, encoding="utf-8-sig")

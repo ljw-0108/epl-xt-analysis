@@ -15,7 +15,7 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
-from epl_xt.openplay_adapter import convert_openplay_passes
+from epl_xt.openplay_adapter import SET_PIECE_FLAGS, convert_openplay_passes
 from epl_xt.provenance_2526 import sha256
 from epl_xt.quality import audit_events, audit_xt_grid
 
@@ -25,7 +25,31 @@ CHECKSUMS = RAW / "openplay_checksums.json"
 GRID_JSON = RAW / "karun_open_xt_12x8_v1.json"
 REPORT = ROOT / "docs/data_quality_report.md"
 AUDIT_COLUMNS = ["comp", "season", "match_id", "event_id", "team", "player", "type", "outcome",
-                 "period", "minute", "second", "x", "y", "end_x", "end_y", "related_player_id"]
+                 "period", "minute", "second", "x", "y", "end_x", "end_y", "related_player_id", *SET_PIECE_FLAGS]
+
+
+def set_piece_evidence(passes: pd.DataFrame) -> dict:
+    def pct(mask, cond):
+        part = passes.loc[mask]
+        return f"{cond(part).mean():.2%}" if len(part) else "n/a"
+    edge = lambda v: (v <= 2) | (v >= 98)  # noqa: E731
+    checks = [
+        ("q_CornerTaken", "start x >= 98 and y at a touchline (<=2 or >=98)", lambda d: (d["x"] >= 98) & edge(d["y"])),
+        ("q_ThrowIn", "start y at a touchline (<=2 or >=98)", lambda d: edge(d["y"])),
+        ("q_GoalKick", "start x <= 7 (own six-yard area)", lambda d: d["x"] <= 7),
+        ("q_FreekickTaken", "none (any location)", None),
+        ("q_IndirectFreekickTaken", "none (any location)", None),
+    ]
+    rows = [{"flag": f, "n": int(passes[f].sum()), "check": desc,
+             "agree": pct(passes[f], cond) if cond else "—"} for f, desc, cond in checks]
+    flags = passes[list(SET_PIECE_FLAGS)]
+    restart = flags.any(axis=1)
+    centre = passes["x"].between(49.5, 50.5) & passes["y"].between(49.5, 50.5)
+    return {"rows": rows, "multi_flag": int((flags[["q_CornerTaken", "q_FreekickTaken", "q_ThrowIn", "q_GoalKick"]].sum(axis=1) > 1).sum()),
+            "ifk": int(passes["q_IndirectFreekickTaken"].sum()),
+            "ifk_in_fk": int((passes["q_IndirectFreekickTaken"] & passes["q_FreekickTaken"]).sum()),
+            "restarts": int(restart.sum()), "open_play": int((~restart).sum()),
+            "centre_untagged": int((centre & ~restart).sum())}
 
 
 def main() -> None:
@@ -39,7 +63,8 @@ def main() -> None:
     events = pd.read_parquet(EVENT_FILE, columns=AUDIT_COLUMNS)
     ev = audit_events(events)
     _, adapter = convert_openplay_passes(events[["comp", "season", "match_id", "team", "player", "type",
-                                                 "outcome", "x", "y", "end_x", "end_y"]])
+                                                 "outcome", "x", "y", "end_x", "end_y", *SET_PIECE_FLAGS]])
+    sp = set_piece_evidence(events.loc[events["type"].astype(str).eq("Pass")])
     grid = audit_xt_grid(json.loads(GRID_JSON.read_text(encoding="utf-8")))
     lines = [
         "# Data quality report — OpenPlay EPL 2025/26",
@@ -79,6 +104,17 @@ def main() -> None:
         "",
         "## Canonical conversion (`convert_openplay_passes`)",
         f"- {json.dumps(adapter)}",
+        "",
+        "## Set-piece flags (open-play filter)",
+        "Provider qualifier flags on pass rows; location checks measure whether the flags agree with where restarts must start.",
+        "",
+        "| Flag | Passes | Location check | Agreement |",
+        "|---|---|---|---|",
+        *[f"| `{r['flag']}` | {r['n']:,} | {r['check']} | {r['agree']} |" for r in sp["rows"]],
+        "",
+        f"- Passes with more than one restart flag: {sp['multi_flag']}; indirect free kicks that are also `q_FreekickTaken`: {sp['ifk_in_fk']} of {sp['ifk']}.",
+        f"- Restart passes excluded by the open-play filter: {sp['restarts']:,}; open-play passes: {sp['open_play']:,}.",
+        f"- Untagged passes starting at the centre spot (49.5..50.5): {sp['centre_untagged']:,}. These look like kick-offs, but the source has no kick-off flag, so they stay in open play (no coordinate-based guessing).",
         "",
         "## xT grid",
         f"- {json.dumps(grid)}",

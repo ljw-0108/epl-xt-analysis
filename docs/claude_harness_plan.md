@@ -92,3 +92,11 @@
 - Fix found during rehearsal: `quality.py` groupbys now use `observed=True` (raw parquet columns are categorical; unobserved categories could create phantom groups). New regression test fails on the old code, passes on the fix; regenerated `docs/data_quality_report.md` is unchanged apart from its date.
 - `python -m pytest -q` → 53 passed, 5 skipped.
 - Blocker: actual deployment requires the user's Streamlit Community Cloud account (steps in `docs/deployment.md`).
+
+### B7 — Open-play-only xT filter (2026-11-25, user request)
+- Source evidence first: `play_pattern` is empty on 99.8% of passes (unusable). Provider qualifier flags `q_CornerTaken` (3,785), `q_FreekickTaken` (8,971; includes all 1,169 `q_IndirectFreekickTaken`), `q_ThrowIn` (13,614), `q_GoalKick` (5,901) agree with restart locations at 100% / 100% / 99.98%; no pass carries two flags; OpenPlay's DATA_DICTIONARY documents q_ columns as provider qualifiers. No kick-off flag exists (1,696 untagged centre-spot passes stay in open play).
+- `openplay_adapter.py`: new canonical column `is_open_play`; all-NA (filter disabled) if flag columns are missing; incomplete flags stop conversion. `pipeline.py` reads only flag columns present in the file. `app_data.py` marks older imports as filter-unavailable.
+- `app.py`: sidebar `패스 범위` (전체 패스 / 오픈플레이만) applied before all tabs; scope note in every tab's caption; CSV export includes `is_open_play`.
+- `scripts/audit_openplay_2526.py`: set-piece evidence section in `docs/data_quality_report.md`.
+- Tests: +3 adapter (flags, missing flags, incomplete flags), +2 app (filter changes all tabs consistently; disabled without flags). `python -m pytest -q` → 58 passed, 5 skipped.
+- Real data: 32,271 restart passes / 330,468 open-play. Open-play team xT recomputed independently from the raw parquet for 20/20 teams → max diff 0.0. Arsenal 46.290 → 32.688 (29.4% of pass-xT came from restart passes); open-play top: Liverpool 33.856, Man Utd 33.798, Newcastle 32.990. Playwright: toggle changes attempts 19,417 → 17,910 and xT tab shows 32.688, no page errors. Screenshot `docs/screenshots/05_openplay_xt.png`.

@@ -143,3 +143,38 @@ def test_heatmap_labels_never_show_negative_zero():
     m[0, 0], m[1, 1] = -0.0001, 0.5
     texts = [t.get_text() for t in zone_heatmap_figure(m, "t", signed=True).axes[0].texts]
     assert "-0.00" not in texts and "0.00" in texts and "0.50" in texts
+
+
+
+def test_open_play_filter_applies_to_every_tab(monkeypatch, tmp_path):
+    root = tmp_path / "op"
+    (root / "config").mkdir(parents=True)
+    (root / "data/processed").mkdir(parents=True)
+    df = synthetic_passes()
+    df["is_open_play"] = True
+    df.loc[(df.team == "Alpha") & (df.x == 70), "is_open_play"] = False  # 6 Alpha restart passes
+    passes, grid = root / "data/processed/passes.csv", root / "data/processed/xt_grid.csv"
+    df.to_csv(passes, index=False)
+    np.savetxt(grid, np.tile(np.linspace(0.01, 0.12, 12), (8, 1)), delimiter=",", fmt="%.8f")
+    sha = lambda p: hashlib.sha256(p.read_bytes()).hexdigest()  # noqa: E731
+    (root / "config/source_manifest.json").write_text(json.dumps(dict(
+        competition="EPL", season="2025/26", source_reference=ALLOWED_SOURCE,
+        verification_method="source_release_sha256", match_ids=[M1, M2],
+        processed_passes_sha256=sha(passes), xt_grid_sha256=sha(grid))), encoding="utf-8")
+    at = run_app(monkeypatch, root)
+    scope = next(r for r in at.sidebar.radio if r.label == "패스 범위")
+    assert not scope.disabled
+    all_xt = metric(at, "패스 xT 합계 (부호 유지)")
+    assert metric(at, "패스 시도") == "12"
+    scope.set_value("오픈플레이만").run()
+    assert not at.exception
+    assert metric(at, "패스 시도") == "6"
+    assert metric(at, "패스 xT 합계 (부호 유지)") != all_xt
+    ranking = next(d.value for d in at.dataframe if "순위" in d.value.columns)
+    assert ranking["패스 시도"].sum() == 6  # player tab uses the same scope
+
+
+def test_open_play_filter_disabled_without_flags(monkeypatch, data_root):
+    at = run_app(monkeypatch, data_root)
+    scope = next(r for r in at.sidebar.radio if r.label == "패스 범위")
+    assert scope.disabled

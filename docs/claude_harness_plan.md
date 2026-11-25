@@ -44,3 +44,11 @@
 - Environment: `karun.in` was blocked by the session network policy; a personal environment `epl-xt-analysis` allowing it was created with user approval.
 - Open: archived 26/27 results CSV is not in the repo (user to supply); unpushed Codex work (if any) unknown.
 - Next: B1 passing module (direction distribution, progressive passes = successful pass reducing distance to goal centre by ≥25%).
+
+### B1 — Team/match passing module (2026-11-25)
+- Added `src/epl_xt/passing.py` (filter_passes, add_pass_geometry, direction_distribution, passing_summary) and `tests/test_passing.py` (7 tests: team/match filters, metric-pitch angles, exact 45/135 boundaries, inclusive 25% progressive threshold, failed passes excluded, empty selection without fake rates).
+- Real-data sanity (passes.csv from B0): league 362,739 attempted / 290,873 successful / 29,326 progressive.
+  Arsenal (38 matches): 19,417 attempted, 15,952 successful (82.15%), 1,456 progressive; forward 5,888 / lateral 10,713 / backward 2,816 / zero-length 0.
+  Arsenal progressive count independently recomputed from the raw parquet: 1,456 (match).
+- UI wiring is scheduled for B4 (app integration); the current app does not show these metrics yet.
+- Next: B2 xT team aggregates + zone heatmap data + independent reproducibility test.

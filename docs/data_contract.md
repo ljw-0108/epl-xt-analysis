@@ -26,3 +26,10 @@
 - `team_xt_summary`: per team over the rows passed in (filters applied first): successful passes, signed total, positive part, negative part, xT per successful pass. Failed passes contribute 0 and are not counted.
 - `xt_by_zone(location="start"|"end", value="sum"|"count")`: 8x12 heatmap data; the signed "sum" matrix adds up to the selection's total.
 - **Eligibility caveat:** every OpenPlay `Pass` event is included, so set-piece passes (corners, free kicks, throw-ins) count. Corner deliveries can carry large xT gains (e.g. Arsenal's largest start-zone total is the corner cell). An open-play-only filter using OpenPlay qualifier columns is a possible later addition, not part of the current metric.
+
+## Player metrics (`src/epl_xt/players.py`)
+- Key = (team, player); a player who changed clubs is listed once per club and never merged.
+- Columns: matches (matches in the selection with >=1 pass attempt — **not** appearances or minutes), attempted, successful, completion_rate, progressive, pass_xt (signed, successful passes), positive_xt, xt_per_successful_pass (NaN when 0 successful).
+- No per-90 metrics: the source has no minutes played.
+- `compare_players` takes exactly two distinct keys from a table built on the same filtered selection; players without passes in that selection are returned in `missing`, never zero-filled.
+- `rank_players` drops players under `min_attempted` and NaN metric values instead of ranking them as 0.

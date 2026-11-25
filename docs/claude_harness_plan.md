@@ -6,9 +6,9 @@
 | Gate | Target | Evidence | Status |
 |---|---|---|---|
 | A | Repo and data audit | `docs/data_quality_report.md` (re-measured 2026-11-25): 380 matches, 362,739 passes, 0 dropped; grid hash pinned | **Done (B0)** |
-| B | Passing analysis | team and match filters + actual pass maps + test | Pending review |
+| B | Passing analysis | `passing.py` + 7 tests; real-data progressive count reproduced (B1); UI pending B4 | **Logic done**, UI pending |
 | C | xT analysis | grid hash pinned + orientation evidence (B0); team totals reproduced independently for 20/20 teams, diff 0.0 (B2); heatmap matrices; UI pending B4 | **Logic done**, UI pending |
-| D | Player analysis | filter consistent 2-player comparison and missing handling + test | Pending review |
+| D | Player analysis | `players.py` + 6 tests (filter consistency, missing player, transfers, NaN ranking); real-data counts match raw for 545/545 (team, player) keys; UI pending B4 | **Logic done**, UI pending |
 | E | Quality | pytest and Streamlit smoke test, data exclusions, README | Pending review |
 | F | Portfolio/release | deploy URL or documented blocker, PR, screenshots, demo notes | Pending |
 
@@ -60,3 +60,9 @@
   League-wide team pass-xT range: Brentford 49.432 (highest) … Burnley 29.303 (lowest); all teams 38 matches.
 - Caveat recorded: set-piece passes are included in the xT metric.
 - Next: B3 player comparison module.
+
+### B3 — Player comparison module (2026-11-25)
+- Added `src/epl_xt/players.py` (player_table, rank_players, compare_players, player_label) and `tests/test_players.py` (6 tests).
+- Real data: 545 (team, player) rows; key set and per-key attempted counts identical to the raw parquet (0 mismatches); pass_xt identical to existing `player_xt_ranking` (max diff 0.0); totals 362,739 / 290,873 / 29,326 progressive; 14 transferred players kept per club.
+- Arsenal example (all 38 matches): Declan Rice 2,363 attempted, 1,940 successful, 185 progressive, pass-xT 9.9476; Bukayo Saka 907 / 645 / 100 / 7.1879.
+- Next: B4 app integration (tabs, cached loading, opponent labels, full pass map, heatmaps, comparison, AppTest smoke tests).

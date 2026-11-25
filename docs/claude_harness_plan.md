@@ -100,3 +100,12 @@
 - `scripts/audit_openplay_2526.py`: set-piece evidence section in `docs/data_quality_report.md`.
 - Tests: +3 adapter (flags, missing flags, incomplete flags), +2 app (filter changes all tabs consistently; disabled without flags). `python -m pytest -q` → 58 passed, 5 skipped.
 - Real data: 32,271 restart passes / 330,468 open-play. Open-play team xT recomputed independently from the raw parquet for 20/20 teams → max diff 0.0. Arsenal 46.290 → 32.688 (29.4% of pass-xT came from restart passes); open-play top: Liverpool 33.856, Man Utd 33.798, Newcastle 32.990. Playwright: toggle changes attempts 19,417 → 17,910 and xT tab shows 32.688, no page errors. Screenshot `docs/screenshots/05_openplay_xt.png`.
+
+### B8 — Friendlier design for non-experts (2026-11-25, user request)
+- Display layer only; `passing.py`, `xt.py`, `players.py`, data loading and verification are unchanged.
+- Charts moved from matplotlib to Plotly (`src/epl_xt/charts.py`): Korean labels, hover on every pass end point (player, result, length, xT) and every zone (plain zone name, value); grass-tinted pitch with 우리 골문 / 상대 골문 / 공격 방향 labels; zero-rounding heatmap cells left blank. `requirements.txt`: matplotlib → plotly.
+- `src/epl_xt/narrative.py`: fixed-template plain-language summaries filled only from computed values (pass, direction, xT, two-player); `tests/test_narrative.py` (5 tests).
+- `app.py`: "처음이라면" guide, ⓘ help on every metric, 💡 summary per tab, bordered metric cards, renamed tabs (① 패스 지도, ② 위협 지도 (xT), ③ 선수 비교) plus a 📖 glossary tab with "이 사이트가 하지 않는 것"; glossary counts read from the manifest. `.streamlit/config.toml`: theme and `gatherUsageStats = false`.
+- Tests: chart tests ported to Plotly with the same guarantees (every pass drawn once as a segment and once as a hover point; diverging scale centred on 0; no "-0.00"/"0.00" labels); metric label rename in the open-play test; new UI test for tabs, story text and data-driven glossary. `python -m pytest -q` → 64 passed, 5 skipped.
+- Real data (Playwright): stories read "Arsenal의 기록: 선택한 1경기에서 패스를 329번 시도해 239번 성공했습니다(성공률 73%) … 전진 패스는 28번", xT story 0.76 / +0.94 / −0.18 with top zone 상대 진영의 측면 (0.22); no page errors. Screenshots 01–06 regenerated.
+- Not yet updated: the Word progress report's figures (made before this redesign).

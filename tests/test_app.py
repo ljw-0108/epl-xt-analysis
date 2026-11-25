@@ -6,7 +6,6 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
-from matplotlib.collections import LineCollection
 
 from epl_xt.app_data import load_dataset, match_options
 from epl_xt.charts import pass_map_figure, zone_heatmap_figure
@@ -71,16 +70,18 @@ def test_load_dataset_rejects_manifest_match_ids_mismatch(data_root):
 def test_pass_map_draws_every_pass():
     df = synthetic_passes()
     fig = pass_map_figure(df, "t")
-    segs = sum(len(c.get_segments()) for c in fig.axes[0].collections if isinstance(c, LineCollection))
+    # each pass is one start->end segment followed by a None break in a lines trace
+    segs = sum(len(tr.x) // 3 for tr in fig.data if tr.mode == "lines")
     assert segs == len(df)
+    dots = sum(len(tr.x) for tr in fig.data if tr.mode == "markers")
+    assert dots == len(df)  # one hoverable end point per pass
 
 
 def test_heatmap_signed_is_centred_on_zero():
     m = np.zeros((8, 12))
     m[0, 0], m[3, 11] = -0.5, 2.0
-    fig = zone_heatmap_figure(m, "t", signed=True)
-    norm = fig.axes[0].images[0].norm
-    assert norm.vcenter == 0 and norm.vmin == -2.0 and norm.vmax == 2.0
+    heat = zone_heatmap_figure(m, "t", signed=True).data[0]
+    assert heat.zmid == 0 and heat.zmin == -2.0 and heat.zmax == 2.0
     with pytest.raises(ValueError, match="8 x 12"):
         zone_heatmap_figure(np.zeros((3, 3)), "t", signed=False)
 
@@ -141,8 +142,9 @@ def test_app_without_data_shows_instructions(monkeypatch, tmp_path):
 def test_heatmap_labels_never_show_negative_zero():
     m = np.zeros((8, 12))
     m[0, 0], m[1, 1] = -0.0001, 0.5
-    texts = [t.get_text() for t in zone_heatmap_figure(m, "t", signed=True).axes[0].texts]
-    assert "-0.00" not in texts and "0.00" in texts and "0.50" in texts
+    texts = [str(v) for v in np.asarray(zone_heatmap_figure(m, "t", signed=True).data[0].text).ravel()]
+    assert "-0.00" not in texts and "0.00" not in texts and "0.50" in texts
+    assert texts.count("") == 95  # the zero cell and the cell rounding to zero stay blank
 
 
 
@@ -164,12 +166,12 @@ def test_open_play_filter_applies_to_every_tab(monkeypatch, tmp_path):
     at = run_app(monkeypatch, root)
     scope = next(r for r in at.sidebar.radio if r.label == "패스 범위")
     assert not scope.disabled
-    all_xt = metric(at, "패스 xT 합계 (부호 유지)")
+    all_xt = metric(at, "위협 점수 합계 (xT)")
     assert metric(at, "패스 시도") == "12"
     scope.set_value("오픈플레이만").run()
     assert not at.exception
     assert metric(at, "패스 시도") == "6"
-    assert metric(at, "패스 xT 합계 (부호 유지)") != all_xt
+    assert metric(at, "위협 점수 합계 (xT)") != all_xt
     ranking = next(d.value for d in at.dataframe if "순위" in d.value.columns)
     assert ranking["패스 시도"].sum() == 6  # player tab uses the same scope
 
@@ -178,3 +180,14 @@ def test_open_play_filter_disabled_without_flags(monkeypatch, data_root):
     at = run_app(monkeypatch, data_root)
     scope = next(r for r in at.sidebar.radio if r.label == "패스 범위")
     assert scope.disabled
+
+
+
+def test_glossary_tab_and_plain_language_story(monkeypatch, data_root):
+    at = run_app(monkeypatch, data_root)
+    assert [t.label for t in at.tabs] == ["① 패스 지도", "② 위협 지도 (xT)", "③ 선수 비교", "📖 쉬운 용어 설명"]
+    texts = " ".join(m.value for m in at.markdown)
+    assert "Alpha의 기록: 선택한 2경기에서 패스를 12번 시도해" in texts  # story uses the same numbers as the metrics
+    assert "위협 점수 (xT)" in texts and "이 사이트가 하지 않는 것" not in texts  # glossary body is markdown items
+    assert any("이 사이트가 하지 않는 것" in h.value for h in at.subheader)
+    assert "380경기" not in texts  # counts come from the manifest, the synthetic one has none

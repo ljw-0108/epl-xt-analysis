@@ -8,12 +8,14 @@
 ## 기능
 | 탭 | 내용 |
 |---|---|
-| ① 패스 분석 | 팀·경기(상대팀 표시) 필터, 전체 패스 지도(샘플링 없음, 성공/실패/전진 필터), 방향 분포(전진·횡·후진), 전진 패스 수, 필터된 패스 CSV 내려받기 |
-| ② xT 분석 | 부호 유지 패스 xT 합계(+/− 분리), 출발·도착 위치별 xT 히트맵, 위치별 성공 패스 수, 사용한 xT 그리드, 같은 경기 내 상대팀 비교 |
-| ③ 선수 비교 | 지표별 선수 순위(최소 시도 수), 같은 필터에서 두 선수 비교(차이 포함) |
-| 공통 필터 | 팀, 경기 범위(시즌 전체/경기 선택), **패스 범위(전체/오픈플레이만)** — 세 탭에 동시에 적용 |
+| ① 패스 지도 | 전체 패스 지도(샘플링 없음, 점에 마우스를 올리면 선수·결과·xT 표시), 방향 분포(전진·횡·후진), 전진 패스 수, 필터된 패스 CSV 내려받기 |
+| ② 위협 지도 (xT) | 위협 점수(xT) 합계(+/− 분리), 출발·도착 위치별 히트맵(칸에 마우스를 올리면 구역 이름·값), 위치별 성공 패스 수, 사용한 xT 그리드, 같은 경기 상대팀 비교 |
+| ③ 선수 비교 | 같은 필터에서 두 선수 비교(막대·표·차이), 지표별 선수 순위(최소 시도 수) |
+| 📖 쉬운 용어 설명 | 축구를 잘 몰라도 읽을 수 있는 용어 사전, ‘이 사이트가 하지 않는 것’, 데이터 출처 |
+| 공통 필터 | 팀, 경기 범위(시즌 전체/경기 선택), **패스 범위(전체/오픈플레이만)** — 모든 탭에 동시에 적용 |
+| 처음 보는 사람을 위한 장치 | 첫 화면의 ‘이 사이트 읽는 법’, 숫자마다 ⓘ 도움말, 각 탭의 💡 한눈에 보기 문장(화면 숫자로만 만든 고정 문장), 경기장에 우리/상대 골문·공격 방향 표시 |
 
-스크린샷: [xT 히트맵](docs/screenshots/02_xt_heatmap.png) · [선수 비교](docs/screenshots/03_player_comparison.png) · [시즌 전체 패스](docs/screenshots/04_season_passing.png) · [오픈플레이 xT](docs/screenshots/05_openplay_xt.png) · 시연 순서: [docs/demo.md](docs/demo.md)
+스크린샷: [위협 지도](docs/screenshots/02_xt_heatmap.png) · [선수 비교](docs/screenshots/03_player_comparison.png) · [시즌 전체 패스](docs/screenshots/04_season_passing.png) · [오픈플레이 xT](docs/screenshots/05_openplay_xt.png) · [용어 설명](docs/screenshots/06_glossary.png) · 시연 순서: [docs/demo.md](docs/demo.md)
 
 ## 실행 방법 (Windows PowerShell 기준, Python 3.11+)
 ```powershell
@@ -59,13 +61,13 @@ macOS/Linux는 `python3 -m venv .venv && source .venv/bin/activate` 후 같은 �
 - 26/27 시즌은 경기 결과만 별도 보관 페이지(`pages/99_26_27_결과_보관.py`)에 있으며 25/26 분석과 합치지 않는다. 결과 CSV는 저장소에 없어서 관련 테스트 5개는 사유와 함께 skip된다.
 
 ## 테스트
-`python -m pytest -q` → **58 passed, 5 skipped** (2026-11-25, 이 브랜치). 합성 데이터 테스트는 `SYNTHETIC_TEST_ONLY`로 표시되며 실데이터로 표시되지 않는다. 실데이터 수치는 원본 Parquet에서 별도 구현으로 다시 계산해 일치를 확인했다(기록: [`docs/claude_harness_plan.md`](docs/claude_harness_plan.md)).
+`python -m pytest -q` → **64 passed, 5 skipped** (2026-11-25, 이 브랜치). 합성 데이터 테스트는 `SYNTHETIC_TEST_ONLY`로 표시되며 실데이터로 표시되지 않는다. 실데이터 수치는 원본 Parquet에서 별도 구현으로 다시 계산해 일치를 확인했다(기록: [`docs/claude_harness_plan.md`](docs/claude_harness_plan.md)).
 
 ## 코드 구조
-- `app.py` — Streamlit UI (탭 3개, 공통 필터)
+- `app.py` — Streamlit UI (탭 4개, 공통 필터, 테마는 `.streamlit/config.toml`)
 - `src/epl_xt/openplay_adapter.py` — 원본 → 표준 패스 표 (수신자 추정 금지)
 - `src/epl_xt/passing.py` · `xt.py` · `players.py` — 패스 · xT · 선수 지표
-- `src/epl_xt/charts.py` · `app_data.py` · `pipeline.py` — 차트, 검증된 데이터 로딩, 다운로드·검증·변환 파이프라인
+- `src/epl_xt/charts.py` · `narrative.py` · `app_data.py` · `pipeline.py` — Plotly 차트, 쉬운 말 요약 문장, 검증된 데이터 로딩, 다운로드·검증·변환 파이프라인
 - `src/epl_xt/quality.py` · `provenance_2526.py` · `validation.py` — 품질 감사, 무결성, 스키마 검증
 - `scripts/` — 다운로드, 품질 감사, (26/27) 경기 통계 갱신
 

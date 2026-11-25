@@ -9,29 +9,48 @@ import os
 import sys
 import threading
 
-import matplotlib.pyplot as plt
 import pandas as pd
 import streamlit as st
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / "src"))
 from epl_xt.app_data import load_dataset, match_options, open_play_available  # noqa: E402
-from epl_xt.charts import pass_map_figure, zone_heatmap_figure  # noqa: E402
+from epl_xt.charts import compare_bar_figure, direction_bar_figure, pass_map_figure, zone_heatmap_figure  # noqa: E402
+from epl_xt.narrative import compare_story, direction_story, pass_story, xt_story  # noqa: E402
 from epl_xt.passing import direction_distribution, passing_summary  # noqa: E402
 from epl_xt.pipeline import build_verified_dataset  # noqa: E402
 from epl_xt.players import RANKABLE, compare_players, player_table, rank_players  # noqa: E402
 from epl_xt.xt import team_xt_summary, xt_by_zone  # noqa: E402
 
 DATA_ROOT = Path(os.environ.get("EPL_DATA_ROOT", ROOT))
-DIRECTION_KO = {"forward": "전진", "lateral": "횡", "backward": "후진", "zero_length": "길이 0"}
+DIRECTION_KO = {"forward": "전진 (앞으로)", "lateral": "횡 (옆으로)", "backward": "후진 (뒤로)", "zero_length": "길이 0"}
 METRIC_KO = {"attempted": "패스 시도", "successful": "성공 패스", "completion_rate": "성공률",
-             "progressive": "전진 패스", "pass_xt": "패스 xT 합계", "positive_xt": "+xT 합계",
-             "xt_per_successful_pass": "성공 패스당 xT", "matches": "패스 기록 경기 수"}
+             "progressive": "전진 패스", "pass_xt": "위협 점수 합계 (xT)", "positive_xt": "+위협 점수",
+             "xt_per_successful_pass": "성공 패스당 위협 점수", "matches": "패스 기록 경기 수"}
+HELP = {
+    "matches": "선택한 범위에 들어간 경기 수입니다.",
+    "attempted": "패스를 보낸 횟수입니다. 받은 선수가 공을 잡았는지와 상관없이 셉니다.",
+    "successful": "같은 팀 선수에게 제대로 연결된 패스 수입니다.",
+    "completion_rate": "성공 패스 ÷ 패스 시도. 높을수록 공을 잘 지켰다는 뜻입니다.",
+    "progressive": "성공한 패스 중 상대 골문까지 거리가 25% 이상 줄어든 패스, 즉 공격을 크게 전진시킨 패스입니다.",
+    "xt": "xT(Expected Threat, 기대 위협)는 공이 있는 위치가 골로 이어질 가능성을 점수로 나타낸 것입니다. "
+          "패스로 공을 더 위험한 곳으로 옮기면 +, 뒤로 돌리면 − 점수가 됩니다. 실패한 패스는 0점입니다.",
+    "positive_xt": "위협을 높인 패스들의 점수만 더한 값입니다.",
+    "negative_xt": "공을 뒤나 덜 위험한 곳으로 옮겨 위협이 줄어든 패스들의 점수입니다. 안전하게 공을 돌리는 것이라 나쁜 것만은 아닙니다.",
+    "xt_per": "성공한 패스 한 번이 평균적으로 만든 위협 점수입니다.",
+}
 
-st.set_page_config(page_title="EPL Tactical Lab 25/26", layout="wide")
-st.title("EPL Tactical Lab · 2025/26 패스 · xT · 선수 비교")
-st.caption("실제 OpenPlay 경기 이벤트 기반 · Event data: openplay (Noah Bair), CC BY 4.0 · "
-           "xT grid: Karun Singh (open_xt_12x8_v1)")
+
+def story(text: str) -> None:
+    """A highlighted plain-language summary box (numbers come from the calculations above it)."""
+    if text:
+        with st.container(border=True):
+            st.markdown(f"💡 **한눈에 보기** · {text}")
+
+st.set_page_config(page_title="EPL Tactical Lab 25/26", page_icon="⚽", layout="wide")
+st.title("⚽ EPL Tactical Lab")
+st.markdown("##### 2025/26 프리미어리그 **실제 경기 기록**으로 팀의 패스와 공격 위협을 쉽게 살펴봅니다")
+st.caption("Event data: openplay (Noah Bair), CC BY 4.0 · xT grid: Karun Singh (open_xt_12x8_v1)")
 
 
 @st.cache_data(show_spinner="검증된 25/26 데이터를 불러오는 중…")
@@ -84,25 +103,38 @@ except (OSError, ValueError, KeyError) as exc:
 
 # ---- Filters (shared by every tab) ----
 with st.sidebar:
-    st.header("필터")
-    team = st.selectbox("팀", sorted(scored["team"].unique()))
+    st.header("🔎 보고 싶은 것 고르기")
+    team = st.selectbox("팀", sorted(scored["team"].unique()), help="2025/26 프리미어리그 20개 팀 중 하나를 고르세요.")
     options = match_options(matches, team)
-    scope = st.radio("경기 범위", ["시즌 전체", "경기 선택"], horizontal=True)
+    scope = st.radio("경기 범위", ["시즌 전체", "경기 선택"], horizontal=True,
+                     help="시즌 전체 38경기를 합쳐 보거나, 특정 경기만 골라 볼 수 있습니다.")
     if scope == "시즌 전체":
         selected_ids = [m for m, _ in options]
     else:
         labels = {label: m for m, label in options}
-        picked = st.multiselect("경기 (상대팀 · match_id)", list(labels), default=list(labels)[:1], key=f"matches_{team}")
+        picked = st.multiselect("경기 (상대팀 · 경기 번호)", list(labels), default=list(labels)[:1], key=f"matches_{team}")
         selected_ids = [labels[x] for x in picked]
-    st.caption(f"선택: {len(selected_ids)} / {len(options)} 경기. 원본에 경기 날짜·홈/원정 정보가 없어 상대팀과 ID만 표시합니다.")
+    st.caption(f"선택: {len(selected_ids)} / {len(options)} 경기 · 원본에 경기 날짜와 홈/원정 정보가 없어 상대팀과 경기 번호로 표시합니다.")
     can_filter = open_play_available(scored)
     pass_scope = st.radio("패스 범위", ["전체 패스", "오픈플레이만"], horizontal=True, disabled=not can_filter,
-                          help="오픈플레이만 = 코너킥·프리킥·스로인·골킥으로 재개하는 패스 제외 (원본 제공자 플래그 기준)")
+                          help="오픈플레이만 = 코너킥·프리킥·스로인·골킥처럼 경기가 멈췄다가 다시 시작하는 패스를 빼고, "
+                               "흐르는 플레이 중의 패스만 봅니다.")
     if not can_filter:
-        st.caption("현재 데이터에 세트피스 플래그가 없어 오픈플레이 필터를 쓸 수 없습니다. 다운로드 스크립트를 다시 실행하세요.")
+        st.caption("현재 데이터에 세트피스 표시가 없어 이 필터를 쓸 수 없습니다. 다운로드 스크립트를 다시 실행하세요.")
     open_play_only = can_filter and pass_scope == "오픈플레이만"
-    SCOPE_NOTE = ("오픈플레이 패스만 (코너·프리킥·스로인·골킥 재개 패스 제외, 킥오프는 원본 플래그가 없어 포함)"
+    SCOPE_NOTE = ("오픈플레이 패스만 (코너·프리킥·스로인·골킥 재개 패스 제외, 킥오프는 원본 표시가 없어 포함)"
                   if open_play_only else "세트피스(코너·프리킥·스로인·골킥) 재개 패스 포함")
+    st.divider()
+    st.caption("필터는 모든 탭에 똑같이 적용됩니다.")
+
+with st.expander("👋 처음이라면: 이 사이트 읽는 법 (1분)", expanded=True):
+    g = st.columns(4)
+    g[0].markdown("**1. 팀 고르기**  \n왼쪽에서 팀과 경기를 고릅니다. 시즌 전체도 볼 수 있어요.")
+    g[1].markdown("**2. 패스 지도**  \n선 하나가 패스 하나입니다. 파랑은 성공, 주황은 실패예요.")
+    g[2].markdown("**3. 위협 지도**  \n어느 구역에서 보낸 패스가 골 가능성을 키웠는지 색으로 보여줘요.")
+    g[3].markdown("**4. 선수 비교**  \n두 선수를 골라 같은 조건에서 비교합니다.")
+    st.caption("모르는 단어는 ‘📖 쉬운 용어 설명’ 탭이나 숫자 옆 ⓘ에 마우스를 올려 확인하세요. "
+               "오른쪽은 항상 상대 골문 방향입니다.")
 
 if not selected_ids:
     st.info("선택된 경기가 없습니다. 사이드바에서 경기를 한 개 이상 고르세요.")
@@ -115,19 +147,18 @@ if filtered.empty:
     st.info("선택한 경기에 이 팀의 패스 데이터가 없습니다.")
     st.stop()
 
-tab_pass, tab_xt, tab_players = st.tabs(["① 패스 분석", "② xT 분석", "③ 선수 비교"])
+tab_pass, tab_xt, tab_players, tab_help = st.tabs(["① 패스 지도", "② 위협 지도 (xT)", "③ 선수 비교", "📖 쉬운 용어 설명"])
 
 # ---- 1. Passing ----
 with tab_pass:
     s = passing_summary(filtered)
+    story(pass_story(team, s))
     c = st.columns(5)
-    c[0].metric("경기", s["matches"])
-    c[1].metric("패스 시도", f"{s['attempted']:,}")
-    c[2].metric("성공 패스", f"{s['successful']:,}")
-    c[3].metric("성공률", f"{s['completion_rate']:.1%}")
-    c[4].metric("전진 패스", f"{s['progressive']:,}")
-    st.caption("전진 패스 = 성공 패스 중 상대 골문 중앙까지 거리가 25% 이상 줄어든 패스 (105×68m 환산). "
-               f"패스 범위: {SCOPE_NOTE}.")
+    c[0].metric("경기", s["matches"], help=HELP["matches"], border=True)
+    c[1].metric("패스 시도", f"{s['attempted']:,}", help=HELP["attempted"], border=True)
+    c[2].metric("성공 패스", f"{s['successful']:,}", help=HELP["successful"], border=True)
+    c[3].metric("성공률", f"{s['completion_rate']:.1%}", help=HELP["completion_rate"], border=True)
+    c[4].metric("전진 패스", f"{s['progressive']:,}", help=HELP["progressive"], border=True)
 
     show = st.radio("지도에 표시할 패스", ["전체", "성공", "실패", "전진 패스"], horizontal=True)
     shown = {"전체": filtered, "성공": filtered.loc[filtered["is_successful"]],
@@ -136,94 +167,92 @@ with tab_pass:
     if shown.empty:
         st.info("이 조건에 해당하는 패스가 없습니다.")
     else:
-        fig = pass_map_figure(shown, f"{team}: all {len(shown):,} passes plotted ({len(selected_ids)} match(es))")
-        st.pyplot(fig)
-        plt.close(fig)
+        st.plotly_chart(pass_map_figure(shown, f"{team} · 패스 {len(shown):,}개 ({len(selected_ids)}경기)"),
+                        width="stretch", config={"displayModeBar": False})
         if len(shown) > 2000:
-            st.caption("패스가 많아 선이 겹칩니다. 경기 선택이나 성공/실패/전진 필터, 또는 xT 탭의 위치별 히트맵을 함께 보세요.")
+            st.caption("패스가 많아 선이 겹칩니다. 경기 하나를 고르거나 ‘전진 패스’만 보면 더 선명합니다.")
 
-    st.subheader("패스 방향 분포")
+    st.subheader("패스는 주로 어느 방향으로 갔나요?")
     dist = direction_distribution(filtered)
     dist["방향"] = dist["direction"].map(DIRECTION_KO)
     empty_classes = dist.loc[dist["attempted"] == 0, "방향"].tolist()
     dist = dist.loc[dist["attempted"] > 0]  # no rate is shown for a class with no passes
-    left, right = st.columns([3, 2])
-    left.bar_chart(dist.set_index("방향")[["attempted"]].rename(columns={"attempted": "패스 시도"}),
-                   color="#2a78d6", horizontal=True, sort=False)
-    right.dataframe(dist[["방향", "attempted", "successful", "share_of_attempted", "completion_rate"]]
-                    .rename(columns={"attempted": "시도", "successful": "성공", "share_of_attempted": "비중",
-                                     "completion_rate": "성공률"}),
-                    hide_index=True, width="stretch",
-                    column_config={"비중": st.column_config.NumberColumn(format="percent"),
-                                   "성공률": st.column_config.NumberColumn(format="percent")})
-    st.caption("각도(105×68m 기준, 0° = 공격 방향): |각도| < 45° 전진, > 135° 후진, 그 사이 횡."
-               + (f" 해당 패스 없음: {', '.join(empty_classes)}." if empty_classes else ""))
+    story(direction_story(dist))
+    st.plotly_chart(direction_bar_figure(dist.rename(columns={"방향": "label"})), width="stretch",
+                    config={"displayModeBar": False})
+    with st.expander("표로 보기 · 방향을 나눈 기준"):
+        st.dataframe(dist[["방향", "attempted", "successful", "share_of_attempted", "completion_rate"]]
+                     .rename(columns={"attempted": "시도", "successful": "성공", "share_of_attempted": "비중",
+                                      "completion_rate": "성공률"}),
+                     hide_index=True, width="stretch",
+                     column_config={"비중": st.column_config.NumberColumn(format="percent"),
+                                    "성공률": st.column_config.NumberColumn(format="percent")})
+        st.caption("상대 골문 방향을 0°로 두고, 실제 경기장 비율(105×68m)로 각도를 잽니다. "
+                   "45°보다 앞이면 전진, 135°보다 뒤면 후진, 그 사이는 횡(옆)입니다."
+                   + (f" 해당 패스 없음: {', '.join(empty_classes)}." if empty_classes else "")
+                   + f" 패스 범위: {SCOPE_NOTE}.")
 
-    st.subheader("데이터 내려받기")
-    export_cols = ["match_id", "team", "player", "x", "y", "end_x", "end_y", "is_successful",
-                   "is_open_play", "direction", "is_progressive", "length_m", "pass_xt"]
-    st.download_button(
-        "현재 필터의 패스 CSV 내려받기",
-        filtered[export_cols].to_csv(index=False).encode("utf-8-sig"),
-        file_name=f"epl2526_{team.replace(' ', '_')}_{len(selected_ids)}matches_{'openplay' if open_play_only else 'all'}_passes.csv",
-        mime="text/csv")
-    st.caption("원본 이벤트에서 변환한 실제 패스 행과 이 앱의 계산 열입니다. 수신자 열은 원본에 없어 포함하지 않습니다. "
-               "Event data: openplay (Noah Bair), CC BY 4.0 — 재배포 시 출처 표기 필요.")
+    with st.expander("⬇️ 데이터 내려받기 (CSV)"):
+        export_cols = ["match_id", "team", "player", "x", "y", "end_x", "end_y", "is_successful",
+                       "is_open_play", "direction", "is_progressive", "length_m", "pass_xt"]
+        st.download_button(
+            "현재 필터의 패스 CSV 내려받기",
+            filtered[export_cols].to_csv(index=False).encode("utf-8-sig"),
+            file_name=f"epl2526_{team.replace(' ', '_')}_{len(selected_ids)}matches_{'openplay' if open_play_only else 'all'}_passes.csv",
+            mime="text/csv")
+        st.caption("원본 이벤트에서 변환한 실제 패스 행과 이 앱의 계산 열입니다. 받은 선수 열은 원본에 없어 포함하지 않습니다. "
+                   "Event data: openplay (Noah Bair), CC BY 4.0 — 재배포 시 출처 표기 필요.")
 
 # ---- 2. xT ----
 with tab_xt:
+    st.markdown("**위협 점수(xT)란?** 공이 상대 골문에 가까운 위험한 곳으로 갈수록 골 가능성이 커집니다. "
+                "패스가 공을 더 위험한 곳으로 옮기면 **+점수**, 뒤로 돌리면 **−점수**를 받습니다.")
     tx = team_xt_summary(filtered)
     row = tx.iloc[0] if not tx.empty else None
+    start_sum = xt_by_zone(filtered, "start", "sum")
+    story(xt_story(team, row, start_sum))
     c = st.columns(4)
-    c[0].metric("패스 xT 합계 (부호 유지)", f"{row.pass_xt_total:.3f}" if row is not None else "—")
-    c[1].metric("+xT 합계", f"{row.positive_xt:.3f}" if row is not None else "—")
-    c[2].metric("−xT 합계", f"{row.negative_xt:.3f}" if row is not None else "—")
-    c[3].metric("성공 패스당 xT", f"{row.xt_per_successful_pass:.4f}" if row is not None else "—")
-    st.caption("xT = 성공 패스의 xT(도착 칸) − xT(출발 칸), 실패 패스는 0. 그리드: Karun Singh 공개 12×8 "
-               "(과거 EPL 시즌으로 만든 모델, 2025/26으로 재학습하지 않음). 득점·승리 확률 예측이 아닙니다. "
-               f"패스 범위: {SCOPE_NOTE}.")
+    c[0].metric("위협 점수 합계 (xT)", f"{row.pass_xt_total:.3f}" if row is not None else "—", help=HELP["xt"], border=True)
+    c[1].metric("+ 위협을 높인 패스", f"{row.positive_xt:.3f}" if row is not None else "—", help=HELP["positive_xt"], border=True)
+    c[2].metric("− 위협을 낮춘 패스", f"{row.negative_xt:.3f}" if row is not None else "—", help=HELP["negative_xt"], border=True)
+    c[3].metric("성공 패스당 위협 점수", f"{row.xt_per_successful_pass:.4f}" if row is not None else "—", help=HELP["xt_per"], border=True)
 
-    view = st.radio("히트맵", ["출발 위치별 xT 합계", "도착 위치별 xT 합계", "출발 위치별 성공 패스 수", "사용한 xT 그리드"],
-                    horizontal=True)
-    if view == "사용한 xT 그리드":
-        fig = zone_heatmap_figure(grid, "Karun Singh open xT grid (12 x 8): value of possession per zone", signed=False, fmt="{:.3f}")
+    view = st.radio("지도에서 볼 것", ["어디서 보낸 패스가 위협을 만들었나", "어디로 도착한 패스가 위협을 만들었나",
+                                     "어디서 패스를 많이 했나", "구역별 기본 위협 값 (xT 그리드)"], horizontal=True)
+    if view.startswith("구역별"):
         matrix = grid
-    elif view == "출발 위치별 성공 패스 수":
+        fig = zone_heatmap_figure(grid, "구역별 기본 위협 값: 상대 골문 앞이 가장 높습니다", signed=False, fmt="{:.3f}",
+                                  value_name="기본 위협 값")
+    elif view.startswith("어디서 패스를"):
         matrix = xt_by_zone(filtered, "start", "count")
-        fig = zone_heatmap_figure(matrix, f"{team}: successful passes by start zone", signed=False, fmt="{:.0f}")
+        fig = zone_heatmap_figure(matrix, f"{team} · 성공 패스를 보낸 위치 (횟수)", signed=False, fmt="{:.0f}",
+                                  value_name="성공 패스 수")
     else:
-        loc = "start" if view.startswith("출발") else "end"
-        matrix = xt_by_zone(filtered, loc, "sum")
-        fig = zone_heatmap_figure(matrix, f"{team}: signed pass xT by {loc} zone (blue +, red −)", signed=True)
-    st.pyplot(fig)
-    plt.close(fig)
-    with st.expander("히트맵 수치 표 (행 = y 구간 0→100, 열 = x 구간 0→100)"):
+        loc = "start" if view.startswith("어디서 보낸") else "end"
+        matrix = start_sum if loc == "start" else xt_by_zone(filtered, "end", "sum")
+        what = "보낸" if loc == "start" else "도착한"
+        fig = zone_heatmap_figure(matrix, f"{team} · 패스를 {what} 위치별 위협 점수 (파랑 +, 빨강 −)", signed=True,
+                                  value_name="위협 점수")
+    st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+    st.caption("경기장을 가로 12칸 × 세로 8칸으로 나눴습니다. 칸에 마우스를 올리면 구역 이름과 값이 보입니다. "
+               "그리드: Karun Singh 공개 모델(과거 EPL 시즌으로 만든 것, 2025/26으로 다시 학습하지 않음). "
+               f"득점·승리 확률 예측이 아닙니다. 패스 범위: {SCOPE_NOTE}.")
+    with st.expander("히트맵 수치 표 (행 = 세로 구간, 열 = 가로 구간 → 상대 골문)"):
         st.dataframe(pd.DataFrame(matrix, index=[f"y{r}" for r in range(8)], columns=[f"x{c_}" for c_ in range(12)]).round(4),
                      width="stretch")
 
-    st.subheader("같은 경기 안의 팀별 xT (상대팀 포함)")
+    st.subheader("같은 경기의 상대팀과 비교")
     st.dataframe(team_xt_summary(in_matches).round(4).rename(columns={
-        "team": "팀", "matches": "경기", "successful_passes": "성공 패스", "pass_xt_total": "xT 합계",
-        "positive_xt": "+xT", "negative_xt": "−xT", "xt_per_successful_pass": "성공 패스당 xT"}),
+        "team": "팀", "matches": "경기", "successful_passes": "성공 패스", "pass_xt_total": "위협 점수 합계",
+        "positive_xt": "+위협", "negative_xt": "−위협", "xt_per_successful_pass": "성공 패스당 위협"}),
         hide_index=True, width="stretch")
-    st.caption("선택한 경기들에 실제로 등장한 팀만 집계합니다. 상대팀 행은 그 팀이 이 경기들에서 기록한 값입니다.")
+    st.caption("선택한 경기에 실제로 나온 팀만 집계합니다. 상대팀 행은 그 팀이 같은 경기들에서 기록한 값입니다.")
 
 # ---- 3. Players ----
 with tab_players:
     table = player_table(filtered)
-    st.caption("같은 팀·경기 필터 기준입니다. 출전 시간 데이터가 없어 90분당 지표는 제공하지 않으며, "
-               f"‘경기 수’는 패스를 1회 이상 시도한 경기 수입니다. 패스 범위: {SCOPE_NOTE}.")
-    st.subheader("선수 순위")
-    c = st.columns(2)
-    metric = c[0].selectbox("순위 기준", list(RANKABLE), index=list(RANKABLE).index("pass_xt"), format_func=METRIC_KO.get)
-    min_att = c[1].number_input("최소 패스 시도", min_value=0, value=0, step=10)
-    ranking = rank_players(table, metric, min_attempted=int(min_att))
-    if ranking.empty:
-        st.info("조건에 맞는 선수가 없습니다.")
-    else:
-        st.dataframe(ranking.rename(columns={"rank": "순위", "team": "팀", "player": "선수", **METRIC_KO}).round(4),
-                     hide_index=True, width="stretch")
-
+    st.caption("왼쪽 필터(팀·경기·패스 범위)가 그대로 적용됩니다. 출전 시간 데이터가 없어 90분당 지표는 만들지 않았고, "
+               "‘패스 기록 경기 수’는 패스를 1번 이상 한 경기 수입니다.")
     st.subheader("두 선수 비교")
     players = table.sort_values("attempted", ascending=False)["player"].tolist()
     if len(players) < 2:
@@ -240,17 +269,59 @@ with tab_players:
                 st.warning(f"{p_} ({t_}): 선택한 경기 범위에 패스 기록이 없습니다.")
             found = result["found"].set_index("player")
             if len(found) == 2:
+                story(compare_story(found, a, b))
+                st.plotly_chart(compare_bar_figure(found, a, b, METRIC_KO), width="stretch",
+                                config={"displayModeBar": False})
+                st.caption("막대에는 단위가 같은 ‘횟수’ 지표만 넣었습니다. 위협 점수와 성공률은 아래 표에서 비교하세요.")
                 metrics = ["matches", "attempted", "successful", "completion_rate", "progressive",
                            "pass_xt", "positive_xt", "xt_per_successful_pass"]
                 comp = found[metrics].T
                 comp.index = [METRIC_KO[m] for m in metrics]
                 comp["차이 (A − B)"] = comp[a] - comp[b]
                 st.dataframe(comp.round(4), width="stretch")
-                bars = found[["attempted", "successful", "progressive"]].rename(columns=METRIC_KO).T
-                st.bar_chart(bars, stack=False, color=["#2a78d6", "#eb6834"], horizontal=True, sort=False)
-                st.caption("막대: 같은 단위(패스 건수)인 지표만 함께 표시. xT·성공률은 단위가 달라 표로 비교합니다.")
+
+    st.subheader("선수 순위")
+    c = st.columns(2)
+    metric = c[0].selectbox("순위 기준", list(RANKABLE), index=list(RANKABLE).index("pass_xt"), format_func=METRIC_KO.get)
+    min_att = c[1].number_input("최소 패스 시도", min_value=0, value=0, step=10,
+                                help="패스를 아주 적게 한 선수가 비율 지표에서 1등이 되는 것을 막으려면 숫자를 올리세요.")
+    ranking = rank_players(table, metric, min_attempted=int(min_att))
+    if ranking.empty:
+        st.info("조건에 맞는 선수가 없습니다.")
+    else:
+        st.dataframe(ranking.rename(columns={"rank": "순위", "team": "팀", "player": "선수", **METRIC_KO}).round(4),
+                     hide_index=True, width="stretch")
+
+# ---- 4. Plain-language glossary ----
+with tab_help:
+    st.subheader("📖 쉬운 용어 설명")
+    terms = [
+        ("패스", "같은 팀 선수에게 공을 차서(또는 던져서) 보내는 것. 이 사이트의 선 하나가 패스 하나입니다."),
+        ("성공 / 실패", "같은 팀 선수에게 연결되면 성공, 상대에게 빼앗기거나 밖으로 나가면 실패입니다."),
+        ("전진 패스", "성공한 패스 중 상대 골문까지 거리가 25% 이상 줄어든 패스. 공격을 크게 앞으로 끌고 간 패스입니다."),
+        ("전진 · 횡 · 후진", "패스가 향한 방향입니다. 앞(상대 골문 쪽), 옆, 뒤(우리 골문 쪽)."),
+        ("위협 점수 (xT)", "Expected Threat. 공이 있는 위치가 골로 이어질 가능성을 점수로 만든 것입니다. "
+                         "상대 골문 앞일수록 높고, 패스로 공을 더 위험한 곳에 옮기면 + 점수를 받습니다."),
+        ("세트피스", "코너킥·프리킥·스로인·골킥처럼 경기가 멈췄다가 다시 시작하는 장면입니다."),
+        ("오픈플레이", "세트피스가 아닌, 공이 계속 굴러가는 일반 플레이입니다."),
+        ("측면 / 중앙 통로", "경기장을 세로로 봤을 때 터치라인에 가까운 바깥쪽이 측면, 가운데가 중앙 통로입니다."),
+    ]
+    for term, desc in terms:
+        st.markdown(f"**{term}** — {desc}")
+    st.subheader("이 사이트가 하지 않는 것")
+    st.markdown(
+        "- **누가 누구에게 패스했는지는 보여주지 않습니다.** 원본 데이터에 ‘받은 선수’ 정보가 없어서, 추측해서 선을 잇지 않습니다.\n"
+        "- **90분당 기록은 없습니다.** 선수별 출전 시간 정보가 없기 때문입니다.\n"
+        "- **승패나 득점을 예측하지 않습니다.** 위협 점수는 공의 위치 가치를 나타낼 뿐입니다.\n"
+        "- **위협 점수 기준표는 공개된 기존 모델을 그대로 썼습니다.** 2025/26 시즌으로 새로 만든 것이 아닙니다.")
+    st.subheader("데이터 출처")
+    st.markdown(f"- 경기 이벤트: openplay (Noah Bair), CC BY 4.0 · {manifest.get('source_reference', '')}\n"
+                "- 위협 점수 기준표: Karun Singh, https://karun.in/blog/expected-threat.html\n"
+                "- 원본 파일은 공식 체크섬(SHA-256)으로 확인한 뒤에만 사용합니다."
+                + (f" {qr['matches_with_passes']}경기 · 패스 {qr['pass_rows']:,}건."
+                   if (qr := manifest.get("quality_report")) and {"matches_with_passes", "pass_rows"} <= set(qr) else ""))
 
 st.divider()
-st.warning("원본에 패스 수신자 필드가 없어 선수→선수 패스 네트워크는 표시하지 않습니다 (추정 연결 없음).")
-st.caption(f"출처: {manifest.get('source_reference', '')} · 이벤트 SHA-256 {str(manifest.get('event_asset_sha256', ''))[:12]}… · "
+st.caption("ⓘ 원본에 ‘받은 선수’ 정보가 없어 선수→선수 패스 네트워크는 표시하지 않습니다 (추정 연결 없음). "
+           f"출처: {manifest.get('source_reference', '')} · 이벤트 SHA-256 {str(manifest.get('event_asset_sha256', ''))[:12]}… · "
            f"검증 방식: {manifest.get('verification_method', '')} · 26/27 결과는 별도 보관 페이지에만 있으며 이 분석과 합치지 않습니다.")

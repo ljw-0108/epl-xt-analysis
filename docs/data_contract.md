@@ -20,3 +20,9 @@
 - Direction: angle 0 deg = straight toward x=100. |angle| < 45 forward, |angle| > 135 backward, otherwise lateral (45 and 135 inclusive); start == end is `zero_length`.
 - Progressive pass: **successful** pass whose end is at least 25% closer (metric distance, inclusive) to the attacked goal centre (100, 50) than its start. No minimum-distance or own-half rule is applied; unsuccessful passes are never progressive.
 - Completion rates are `None`/NaN when nothing was attempted; no zero-filled rates.
+
+## xT aggregates (`src/epl_xt/xt.py`)
+- Cell lookup: col = floor(x/100*12), row = floor(y/100*8), with x=100 / y=100 placed in the last cell. Grid rows = y, cols = x toward the attacked goal.
+- `team_xt_summary`: per team over the rows passed in (filters applied first): successful passes, signed total, positive part, negative part, xT per successful pass. Failed passes contribute 0 and are not counted.
+- `xt_by_zone(location="start"|"end", value="sum"|"count")`: 8x12 heatmap data; the signed "sum" matrix adds up to the selection's total.
+- **Eligibility caveat:** every OpenPlay `Pass` event is included, so set-piece passes (corners, free kicks, throw-ins) count. Corner deliveries can carry large xT gains (e.g. Arsenal's largest start-zone total is the corner cell). An open-play-only filter using OpenPlay qualifier columns is a possible later addition, not part of the current metric.

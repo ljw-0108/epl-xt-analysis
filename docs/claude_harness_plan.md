@@ -7,7 +7,7 @@
 |---|---|---|---|
 | A | Repo and data audit | `docs/data_quality_report.md` (re-measured 2026-11-25): 380 matches, 362,739 passes, 0 dropped; grid hash pinned | **Done (B0)** |
 | B | Passing analysis | team and match filters + actual pass maps + test | Pending review |
-| C | xT analysis | verified grid/source + independently checked xT + heatmap + test | Pending review |
+| C | xT analysis | grid hash pinned + orientation evidence (B0); team totals reproduced independently for 20/20 teams, diff 0.0 (B2); heatmap matrices; UI pending B4 | **Logic done**, UI pending |
 | D | Player analysis | filter consistent 2-player comparison and missing handling + test | Pending review |
 | E | Quality | pytest and Streamlit smoke test, data exclusions, README | Pending review |
 | F | Portfolio/release | deploy URL or documented blocker, PR, screenshots, demo notes | Pending |
@@ -52,3 +52,11 @@
   Arsenal progressive count independently recomputed from the raw parquet: 1,456 (match).
 - UI wiring is scheduled for B4 (app integration); the current app does not show these metrics yet.
 - Next: B2 xT team aggregates + zone heatmap data + independent reproducibility test.
+
+### B2 — xT team aggregates and heatmap data (2026-11-25)
+- `src/epl_xt/xt.py`: factored `grid_cells`; added `team_xt_summary` and `xt_by_zone` (start/end, sum/count). `grid_values_at` behaviour unchanged.
+- `tests/test_xt.py`: +4 tests (signed positive/negative parts, empty selection, start/end/count matrices, independent `np.digitize` reimplementation on a seeded synthetic sample including x=y=100 edges).
+- Real data: all 20 teams' totals recomputed directly from the raw parquet + grid JSON → max abs difference **0.0**; zone matrices sum to totals (max error 2e-14). Processed `xt_grid.csv` equals the JSON exactly.
+  League-wide team pass-xT range: Brentford 49.432 (highest) … Burnley 29.303 (lowest); all teams 38 matches.
+- Caveat recorded: set-piece passes are included in the xT metric.
+- Next: B3 player comparison module.

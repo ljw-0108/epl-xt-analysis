@@ -10,7 +10,7 @@
 | C | xT analysis | grid hash pinned (B0); 20/20 team totals reproduced, diff 0.0 (B2); app tab ② signed/count heatmaps, grid view, same-match team table (B4) | **Done** |
 | D | Player analysis | `players.py` (B3) + app tab ③ ranking and 2-player comparison on the shared filter (B4) | **Done** |
 | E | Quality | 46 passed / 5 skipped; AppTest + Playwright on real data; README rewritten with setup, provenance, definitions, limits (B5) | **Done** |
-| F | Portfolio/release | screenshots `docs/screenshots/`, `docs/demo.md`, PR (B5); deploy URL blocked: data is not committed, needs startup download design | Partly done |
+| F | Portfolio/release | screenshots, `docs/demo.md`, PR ljw-0108/epl-xt-analysis#1 (B5); startup pipeline + `docs/deployment.md`, cloud-like rehearsal passed (B6); deploy URL needs user's Streamlit account | Deploy pending user |
 
 ## Scope and dates from assignment
 - 2026-11-10 to 11-16: data verification and xT stabilization (historically reported done; recheck).
@@ -83,3 +83,12 @@
 - Docs: README rewritten; `docs/demo.md` added; `docs/requirements.md` and `docs/definition_of_done.md` checkboxes updated with evidence.
 - `python -m pytest -q` → 46 passed, 5 skipped.
 - Remaining: deployment (Streamlit Cloud needs a startup download step because data is not committed), archived 26/27 CSV, optional open-play-only xT filter.
+
+### B6 — Deployment design (2026-11-25)
+- `src/epl_xt/pipeline.py`: download/checksum/convert pipeline moved out of the CLI script (script is now a thin wrapper). Removes any old manifest first, writes the new one last (atomic rename).
+- `app.py`: no-data state offers "원본 내려받기 및 검증"; `EPL_AUTO_PREPARE=1` (env or root-level Streamlit secret) runs it automatically once per session, under a process-wide lock; failures are shown and never retried in a loop.
+- `tests/test_pipeline.py` (6 tests, fake downloader + synthetic parquet): success builds a loadable dataset; event checksum mismatch removes the bad file and leaves no manifest even after an earlier good run; grid hash mismatch and wrong-season source stop with no manifest; app shows the button; app auto-prepare failure shows no numbers and does not retry, success shows metrics.
+- Rehearsal: code-only copy (no data/manifest) + `EPL_AUTO_PREPARE=1` → dashboard after ~12 s; 362,739 passes / 380 matches; passes.csv SHA-256 identical to the local build. Peak RSS: pipeline ~425 MB, load ~256 MB.
+- Fix found during rehearsal: `quality.py` groupbys now use `observed=True` (raw parquet columns are categorical; unobserved categories could create phantom groups). New regression test fails on the old code, passes on the fix; regenerated `docs/data_quality_report.md` is unchanged apart from its date.
+- `python -m pytest -q` → 53 passed, 5 skipped.
+- Blocker: actual deployment requires the user's Streamlit Community Cloud account (steps in `docs/deployment.md`).

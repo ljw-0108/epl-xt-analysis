@@ -2,10 +2,12 @@
 
 Only checksum-verified real events are shown; no invented receivers, minutes or values.
 EPL_DATA_ROOT (optional) points at another project root holding config/ and data/ (tests).
+EPL_AUTO_PREPARE=1 runs the verified download pipeline automatically when data is missing (deployment).
 """
 from pathlib import Path
 import os
 import sys
+import threading
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -16,6 +18,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from epl_xt.app_data import load_dataset, match_options  # noqa: E402
 from epl_xt.charts import pass_map_figure, zone_heatmap_figure  # noqa: E402
 from epl_xt.passing import direction_distribution, passing_summary  # noqa: E402
+from epl_xt.pipeline import build_verified_dataset  # noqa: E402
 from epl_xt.players import RANKABLE, compare_players, player_table, rank_players  # noqa: E402
 from epl_xt.xt import team_xt_summary, xt_by_zone  # noqa: E402
 
@@ -36,10 +39,46 @@ def _load(root: str):
     return load_dataset(root)
 
 
+@st.cache_resource
+def _prepare_lock():
+    return threading.Lock()
+
+
+def _prepare_data() -> bool:
+    """Run the same checksum-verified pipeline as the CLI script; one run at a time."""
+    with _prepare_lock(), st.status("공식 원본을 내려받아 검증하는 중…", expanded=True) as status:
+        try:
+            build_verified_dataset(DATA_ROOT, log=status.write)
+        except Exception as exc:  # network, checksum or conversion failure: show it, never substitute data
+            status.update(label=f"데이터 준비 실패: {exc}", state="error")
+            return False
+        status.update(label="데이터 준비 완료", state="complete")
+    _load.clear()
+    return True
+
+
+def _auto_prepare_enabled() -> bool:
+    """EPL_AUTO_PREPARE=1 from the environment or a root-level Streamlit secret."""
+    if os.environ.get("EPL_AUTO_PREPARE") == "1":
+        return True
+    try:
+        return str(st.secrets.get("EPL_AUTO_PREPARE", "")) == "1"
+    except Exception:  # no secrets file configured
+        return False
+
+
 try:
     manifest, scored, matches, grid = _load(str(DATA_ROOT))
 except (OSError, ValueError, KeyError) as exc:
     st.warning(f"데이터 준비 전: {exc}")
+    st.caption("공식 OpenPlay 릴리스(약 11.5MB)와 xT 그리드를 내려받아 SHA-256을 확인한 뒤 변환합니다. "
+               "체크섬이 다르면 중단하며 대체 데이터를 만들지 않습니다.")
+    auto = _auto_prepare_enabled() and not st.session_state.get("auto_prepare_tried")
+    if auto:
+        st.session_state["auto_prepare_tried"] = True  # never loop on a failing source
+    if auto or st.button("원본 내려받기 및 검증"):
+        if _prepare_data():
+            st.rerun()
     st.code("python scripts/download_openplay_2526.py", language="powershell")
     st.stop()
 

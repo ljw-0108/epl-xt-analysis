@@ -63,3 +63,14 @@ def test_match_index_refuses_single_team_match():
     passes = events().loc[lambda d: (d.type == "Pass") & (d.team != "B")]
     with pytest.raises(ValueError, match="exactly two teams"):
         match_index(passes)
+
+
+def test_categorical_source_columns_do_not_create_phantom_groups():
+    ev = events()
+    for col in ("match_id", "team", "player"):
+        ev[col] = pd.Categorical(ev[col], categories=sorted(ev[col].unique()) + ["UNUSED"])
+    r = audit_events(ev)
+    assert r["matches_without_exactly_two_passing_teams"] == 0
+    assert "UNUSED" not in r["matches_per_team"]
+    passes = ev.loc[ev.type == "Pass"]
+    assert len(match_index(passes)) == 4

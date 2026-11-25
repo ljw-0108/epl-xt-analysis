@@ -30,6 +30,7 @@ macOS/Linux는 `python3 -m venv .venv && source .venv/bin/activate` 후 같은 �
 - `audit_openplay_2526.py`: 원본을 다시 측정해 [`docs/data_quality_report.md`](docs/data_quality_report.md)를 생성한다.
 - 앱은 시작할 때마다 manifest의 해시로 가공 파일을 다시 검증하며, 데이터가 없거나 변조되면 숫자 대신 준비 방법만 표시한다.
 - 데이터 파일(`data/`)과 생성된 manifest는 Git에 넣지 않는다(`.gitignore`).
+- 데이터가 없으면 앱에서 **원본 내려받기 및 검증** 버튼으로 같은 파이프라인을 실행할 수 있다. 배포(Streamlit Community Cloud)는 [`docs/deployment.md`](docs/deployment.md) 참고.
 
 ## 데이터 출처와 검증 결과
 | 항목 | 값 |
@@ -57,13 +58,13 @@ macOS/Linux는 `python3 -m venv .venv && source .venv/bin/activate` 후 같은 �
 - 26/27 시즌은 경기 결과만 별도 보관 페이지(`pages/99_26_27_결과_보관.py`)에 있으며 25/26 분석과 합치지 않는다. 결과 CSV는 저장소에 없어서 관련 테스트 5개는 사유와 함께 skip된다.
 
 ## 테스트
-`python -m pytest -q` → **46 passed, 5 skipped** (2026-11-25, 이 브랜치). 합성 데이터 테스트는 `SYNTHETIC_TEST_ONLY`로 표시되며 실데이터로 표시되지 않는다. 실데이터 수치는 원본 Parquet에서 별도 구현으로 다시 계산해 일치를 확인했다(기록: [`docs/claude_harness_plan.md`](docs/claude_harness_plan.md)).
+`python -m pytest -q` → **53 passed, 5 skipped** (2026-11-25, 이 브랜치). 합성 데이터 테스트는 `SYNTHETIC_TEST_ONLY`로 표시되며 실데이터로 표시되지 않는다. 실데이터 수치는 원본 Parquet에서 별도 구현으로 다시 계산해 일치를 확인했다(기록: [`docs/claude_harness_plan.md`](docs/claude_harness_plan.md)).
 
 ## 코드 구조
 - `app.py` — Streamlit UI (탭 3개, 공통 필터)
 - `src/epl_xt/openplay_adapter.py` — 원본 → 표준 패스 표 (수신자 추정 금지)
 - `src/epl_xt/passing.py` · `xt.py` · `players.py` — 패스 · xT · 선수 지표
-- `src/epl_xt/charts.py` · `app_data.py` — 차트, 검증된 데이터 로딩
+- `src/epl_xt/charts.py` · `app_data.py` · `pipeline.py` — 차트, 검증된 데이터 로딩, 다운로드·검증·변환 파이프라인
 - `src/epl_xt/quality.py` · `provenance_2526.py` · `validation.py` — 품질 감사, 무결성, 스키마 검증
 - `scripts/` — 다운로드, 품질 감사, (26/27) 경기 통계 갱신
 

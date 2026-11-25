@@ -40,12 +40,12 @@ def audit_events(events: pd.DataFrame) -> dict:
     report["pass_coord_out_of_0_100"] = int((~coords.apply(lambda s: s.between(0, 100))).any(axis=1).sum())
     if "period" in passes.columns:
         report["pass_periods"] = {str(k): int(v) for k, v in passes["period"].value_counts().items() if v}
-    teams_per_match = passes.groupby("match_id")["team"].nunique()
+    teams_per_match = passes.groupby("match_id", observed=True)["team"].nunique()
     report["matches_with_passes"] = int(passes["match_id"].nunique())
     report["matches_without_exactly_two_passing_teams"] = int((teams_per_match != 2).sum())
-    report["matches_per_team"] = {str(k): int(v) for k, v in passes.groupby("team")["match_id"].nunique().items()}
+    report["matches_per_team"] = {str(k): int(v) for k, v in passes.groupby("team", observed=True)["match_id"].nunique().items()}
     report["players_with_passes"] = int(passes["player"].nunique())
-    report["players_on_multiple_teams"] = int(passes.groupby("player")["team"].nunique().gt(1).sum())
+    report["players_on_multiple_teams"] = int(passes.groupby("player", observed=True)["team"].nunique().gt(1).sum())
     if "related_player_id" in passes.columns:
         report["pass_related_player_id_non_null_share"] = float(passes["related_player_id"].notna().mean()) if len(passes) else 0.0
     return report
@@ -78,11 +78,11 @@ def match_index(passes: pd.DataFrame) -> pd.DataFrame:
     for col in ("match_id", "team"):
         if col not in passes.columns:
             raise ValueError(f"Missing column: {col}")
-    pairs = passes.groupby("match_id")["team"].agg(lambda s: sorted(s.astype(str).unique()))
+    pairs = passes.groupby("match_id", observed=True)["team"].agg(lambda s: sorted(s.astype(str).unique()))
     bad = pairs[pairs.map(len) != 2]
     if not bad.empty:
         raise ValueError(f"Matches without exactly two teams: {bad.index.astype(str).tolist()[:5]}")
-    counts = passes.groupby(["match_id", "team"]).size()
+    counts = passes.groupby(["match_id", "team"], observed=True).size()
     rows = []
     for match_id, (a, b) in pairs.items():
         for team, opp in ((a, b), (b, a)):

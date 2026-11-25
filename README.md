@@ -15,8 +15,11 @@ py -3.11 -m venv .venv
 python -m pip install -r requirements.txt
 python -m pytest -q
 python scripts/download_openplay_2526.py
+python scripts/audit_openplay_2526.py
 streamlit run app.py
 ```
+
+`audit_openplay_2526.py`는 원본 체크섬을 다시 확인한 뒤 `docs/data_quality_report.md`(경기 수, 패스 수, 중복, 결측, 좌표 범위, xT 그리드 방향)를 실측값으로 다시 만든다. 26/27 결과 CSV(`data/raw/epl_2627_rounds_1_10_results.csv`)가 없으면 관련 테스트 5개는 사유와 함께 skip된다.
 
 `download_openplay_2526.py`만 인터넷 연결이 필요하며, 원본 패스 파일은 약 11.5MB이다. 첫 실행 시 다운로드 시간을 고려하고 SHA-256 오류가 뜨면 데이터 사용을 중단하라.
 

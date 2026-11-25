@@ -18,11 +18,16 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 from epl_xt.openplay_adapter import convert_openplay_passes
 from epl_xt.provenance_2526 import sha256, ALLOWED_SOURCE
+from epl_xt.quality import match_index
 from epl_xt.validation import validate_passes
 
 RELEASE = "https://github.com/nlbair/openplay/releases/download/data-v0.1.0"
 EVENT_FILE = "events_eng_2526.parquet"
 GRID_URL = "https://karun.in/blog/data/open_xt_12x8_v1.json"
+# The grid publisher provides no checksum file. This SHA-256 was observed on 2026-11-25
+# (see docs/data_quality_report.md); a different file stops the pipeline instead of
+# silently changing every xT number.
+GRID_SHA256 = "5d8e9aaa1da23bbb39a6c6ffdd5b96d175e01c800064c5a1cc19e228c9875a7f"
 RAW = ROOT / "data/raw"
 PROCESSED = ROOT / "data/processed"
 
@@ -67,11 +72,15 @@ def main():
     passes_path = PROCESSED / "passes.csv"
     canonical.to_csv(passes_path, index=False, encoding="utf-8-sig")
     download(GRID_URL, grid_json_path, 50_000)
+    if sha256(grid_json_path) != GRID_SHA256:
+        raise ValueError("xT grid differs from the pinned SHA-256; review the source before using it")
     grid = np.asarray(json.loads(grid_json_path.read_text(encoding="utf-8")), dtype=float)
     if grid.shape != (8, 12) or not np.isfinite(grid).all() or np.any(grid < 0):
         raise ValueError("Karun xT grid must contain 8 x 12 finite nonnegative values")
     grid_path = PROCESSED / "xt_grid.csv"
     np.savetxt(grid_path, grid, delimiter=",", fmt="%.8f")
+    matches_path = PROCESSED / "matches.csv"
+    match_index(canonical).to_csv(matches_path, index=False, encoding="utf-8-sig")
     manifest = {
         "provider": "openplay (Noah Bair)", "source_reference": ALLOWED_SOURCE,
         "event_asset": f"{RELEASE}/{EVENT_FILE}", "event_asset_sha256": expected,
@@ -80,11 +89,12 @@ def main():
         "event_coordinate_mapping": "OpenPlay x,y,end_x,end_y native 0..100; no scaling",
         "attacking_direction_rule": "OpenPlay documented: each team attacks toward x=100",
         "recipient_field": "not provided; left blank; player-to-player network not claimed",
-        "xt_grid_source": GRID_URL,
+        "xt_grid_source": GRID_URL, "xt_grid_json_sha256": GRID_SHA256,
         "xt_grid_note": "Published model trained on EPL 2017/18, not refit to 2025/26",
         "retrieved_on": date.today().isoformat(),
         "match_ids": sorted(canonical["match_id"].unique().tolist()),
         "processed_passes_sha256": sha256(passes_path), "xt_grid_sha256": sha256(grid_path),
+        "processed_matches_sha256": sha256(matches_path),
         "quality_report": report,
     }
     manifest_path = ROOT / "config/source_manifest.json"
@@ -93,7 +103,7 @@ def main():
     print("Saved", len(canonical), "real EPL 2025/26 passes over", canonical.match_id.nunique(), "matches")
     print("Dropped invalid pass rows:", report["dropped_pass_rows"])
     print("Recipient is missing; no verified player-to-player pass network is implied")
-    print("Saved", passes_path, grid_path, manifest_path)
+    print("Saved", passes_path, grid_path, matches_path, manifest_path)
 
 
 if __name__ == "__main__":

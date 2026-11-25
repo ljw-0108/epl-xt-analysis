@@ -6,6 +6,9 @@ import pandas as pd
 
 REQUIRED_SOURCE = {"comp", "season", "match_id", "team", "player", "type", "outcome", "x", "y", "end_x", "end_y"}
 COORDS = ("x", "y", "end_x", "end_y")
+# Provider qualifier flags marking dead-ball restart passes (OpenPlay DATA_DICTIONARY: q_ columns).
+# Indirect free kicks are a subset of q_FreekickTaken in 2025/26. Kick-offs have no flag in the source.
+SET_PIECE_FLAGS = ("q_CornerTaken", "q_FreekickTaken", "q_IndirectFreekickTaken", "q_ThrowIn", "q_GoalKick")
 
 
 def convert_openplay_passes(events: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
@@ -43,7 +46,26 @@ def convert_openplay_passes(events: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
         "end_x": src["end_x"].astype(float),
         "end_y": src["end_y"].astype(float),
         "is_successful": src["outcome"].astype(str).eq("Successful"),
+        "is_open_play": _open_play(src),
     }).reset_index(drop=True)
     report = {"source_event_rows": len(events), "pass_rows": len(src), "dropped_pass_rows": dropped,
               "matches_with_passes": result["match_id"].nunique(), "recipient_status": "not provided by source"}
+    if result["is_open_play"].isna().all():
+        report["set_piece_flags"] = "unavailable in source; open-play filter disabled"
+    else:
+        report["set_piece_flags"] = list(SET_PIECE_FLAGS)
+        report["set_piece_restart_pass_rows"] = int((~result["is_open_play"].astype(bool)).sum())
     return result, report
+
+
+def _open_play(src: pd.DataFrame) -> pd.Series:
+    """False for flagged restart passes, True otherwise; all-NA when any flag column is missing.
+
+    Flags must be real booleans (missing values are not treated as False).
+    """
+    if not set(SET_PIECE_FLAGS) <= set(src.columns):
+        return pd.Series(pd.NA, index=src.index, dtype="boolean")
+    flags = src[list(SET_PIECE_FLAGS)]
+    if flags.isna().any().any() or not all(pd.api.types.is_bool_dtype(flags[c]) for c in SET_PIECE_FLAGS):
+        raise ValueError("Set-piece qualifier flags must be complete booleans")
+    return ~flags.any(axis=1)

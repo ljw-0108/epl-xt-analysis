@@ -1,0 +1,12 @@
+# Shared look for local runs and Streamlit Community Cloud.
+[theme]
+base = "light"
+primaryColor = "#2a78d6"
+backgroundColor = "#fcfcfb"
+secondaryBackgroundColor = "#f0f5f0"
+textColor = "#1f2a24"
+font = "sans serif"
+
+[browser]
+# No usage statistics are sent from this app.
+gatherUsageStats = false

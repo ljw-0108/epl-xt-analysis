@@ -8,6 +8,14 @@ from epl_xt.match_results import load_match_results, standings, validate_match_r
 ROOT = Path(__file__).resolve().parents[1]
 RAW = ROOT / 'data/raw/epl_2627_rounds_1_10_results.csv'
 
+# The archived 26/27 results CSV is git-ignored and cannot be regenerated from this
+# repository without re-collecting results, so these checks skip (visibly) when absent
+# instead of failing on FileNotFoundError or running against invented rows.
+pytestmark = pytest.mark.skipif(
+    not RAW.is_file(),
+    reason=f'archived 26/27 results file not present: {RAW.relative_to(ROOT)} (git-ignored; supply it to run)',
+)
+
 
 def test_real_2026_27_round_1_to_10_results_have_full_coverage():
     r = load_match_results(RAW)
